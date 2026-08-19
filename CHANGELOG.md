@@ -4,6 +4,81 @@ All notable changes to FineSign. Milestones map to FACTORY §7.
 
 ## [Unreleased]
 
+### Finalization pass — open-source readiness
+
+Fixes found by exercising the product rather than re-reading it: driving the web
+UI in a browser, booting the Docker stack, and probing the API with bad input.
+
+**Correctness**
+- Invalid signer signature input is a 400, not a 500. An unknown typed-font key
+  escaped an unchecked cast at the HTTP boundary, and finesign-core's typed
+  errors (`SignatureImageError`, the new `UnknownSignatureFontError`) were never
+  mapped — so a signer's typo surfaced as "internal server error" and was logged
+  at error level. The font is now narrowed against the engine's own allowlist,
+  and core's input errors are translated at the server boundary.
+- PAdES seal configuration is validated at BOOT. `sealPdf` rightly rejects a
+  level it lacks the inputs for, but that check only ran at completion, inside
+  `finalize()`, during the last signer's apply — so one env typo rejected the
+  final signature and left an envelope that could never complete. Adds
+  `revocationSourcesForCert` so the check can ask the certificate itself whether
+  a long-term level is achievable at all.
+- `FINESIGN_PADES_LEVEL` is honored in the dev-seal path (it was computed and
+  then dropped for B-B/B-T, so the sealer silently used its own default).
+- **Production B-LT/B-LTA now works.** The wiring was blocked by a guard that
+  outlived its reason: `createHttpValidationDataProvider` had been built and
+  exported but never injected, so the level the README advertises was
+  unreachable in the deployment the README describes. Adds
+  `FINESIGN_SEAL_TRUST_CERTS` (CA anchor for verification) and
+  `FINESIGN_SEAL_CRL_URL` / `_OCSP_URL` overrides.
+- A mail failure no longer 500s an already-committed transition. Notifications
+  are sent after the save by design; the send itself was unguarded, so a
+  transient SMTP error reported durable work as a failure and abandoned the rest
+  of the batch. Now best-effort per recipient and logged (interim until R.2).
+- `ConsoleLogger` spread caller context last, letting a context key overwrite the
+  severity — the sealer's `level` turned a warning into `{"level":"B-T"}`.
+
+**Reachability** — capabilities that existed on the server but not in the product
+- Text and checkbox fields can be placed. DG2 built capture and stamping and the
+  signer page rendered both, but the sender's field picker never listed them.
+- A misplaced field can be removed (`removeField`, `DELETE .../fields/:fieldId`,
+  click-to-remove in the editor). Previously a stray click meant discarding the
+  draft.
+- The certificate of completion and PAdES verification are in the UI.
+- **Recipients can obtain their signed copy.** Completion emailed everyone "a
+  signed copy is available" with no link, and their token 409'd; a `cc` recipient
+  never had a token at all. Completion now mints a fresh read-only token, the
+  session survives completion, and the document route serves the sealed artifact.
+  Visibility does not widen: acting recipients still see only their own documents.
+- Overlay controls were `pointer-events: none`, inherited from the click-through
+  layer — so the signer's text inputs and checkboxes had never been usable.
+- The envelope list is paged instead of silently stopping at the server's clamp.
+
+**Scale & operations**
+- `listExpirable(nowIso, limit)` on the `EnvelopeRepository` port. The expiry
+  sweep called `list()` with no arguments — the whole table — on every tick, to
+  find a set that is almost always empty. Both SQL adapters keep an indexed
+  `expires_at` column (migrated and backfilled); the sweep works in bounded
+  batches.
+- Graceful shutdown: SIGTERM/SIGINT drain in-flight requests and close the
+  SQLite handle.
+- **The Docker image did not start.** `.dockerignore` patterns do not cross `/`,
+  so `*.tsbuildinfo` matched only the root; the stale per-package files reached
+  the build context, `tsc -b` emitted nothing, and the entrypoint was absent.
+  Broken for anyone building from a previously-built tree.
+- Containers run unprivileged, both services are health-checked with `web` gated
+  on a healthy `server`, and the SPA is served with CSP + `X-Frame-Options: DENY`
+  (a frameable signer page is a clickjacking target).
+
+**Project**
+- CI: the gate on Node 20 + 22, plus a job that builds and boots the self-host
+  stack. `CONTRIBUTING` had claimed CI ran the gate; none existed.
+- `finesign-core` shipped an MIT LICENSE ("Signet contributors") contradicting
+  its Apache-2.0 package.json and the root LICENSE/NOTICE — resolved to
+  Apache-2.0 with a package NOTICE. Remaining "Signet" naming removed.
+- Issue/PR templates, Contributor Covenant 2.1, grouped Dependabot.
+- Doc drift corrected (`.env.example` documented a `VITE_API_BASE` that would
+  have broken the dev UI; `CONTRIBUTING` referenced a nonexistent script).
+
 ### M0 — Harness + core
 - Software factory harness (`FACTORY.md`), PRD, ARCHITECTURE, BACKLOG, ADR-0001.
 - npm-workspaces monorepo with TypeScript project references + `scripts/gate.sh`

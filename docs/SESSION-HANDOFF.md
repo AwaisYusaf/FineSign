@@ -5,8 +5,9 @@
 > Read this first, then trust the code + the `docs/` referenced below. When facts
 > here disagree with the code, **the code wins** — update this file.
 >
-> _Last updated: 2026-07-12. Status: DocuSign-parity gaps DG1–DG5 + open-source
-> readiness complete; **170 tests green across 8 packages**; `npm run gate` green._
+> _Last updated: 2026-08-19. Status: DG1–DG5 complete, plus a finalization pass
+> that fixed the defects listed in CHANGELOG "Finalization pass"; **188 tests
+> green across 8 packages**; `npm run gate` green; CI runs the gate on every PR._
 
 ---
 
@@ -46,6 +47,9 @@ a standalone PDF signing engine.
 | **DG4** — webhooks / event callbacks (Connect-style) | ✅ done, reviewed |
 | **DG5** — encryption at rest (AES-256-GCM blob store) | ✅ done, reviewed |
 | Open-source readiness (license, docs, docker-compose, scans) | ✅ done |
+| CI (gate on Node 20+22; Docker build + boot), issue/PR templates, CoC, Dependabot | ✅ done |
+| Production PAdES **B-LT/B-LTA** (HTTP CRL/OCSP wiring, boot-time validation) | ✅ done |
+| Recipients can fetch their completed copy (incl. `cc`); certificate + verify in the UI | ✅ done |
 
 **The gate is the source of truth for "is it OK":** `npm run gate` runs
 architecture-boundary checks + build + type-aware lint + the full test suite + the
@@ -66,6 +70,8 @@ npm run dev  --workspace @finesign/web   # web UI on :5173 (Vite)
 **Self-host (one command):** `docker compose up --build` → web on `:8080`
 (reverse-proxies the API; single origin, no CORS), server not exposed directly,
 data in the `finesign-data` volume. Requires `.env` with `FINESIGN_SENDER_API_KEY`.
+Both containers run unprivileged and are health-checked; `web` waits for a healthy
+`server`. CI builds and boots this stack on every PR that touches it.
 
 Node 20+ (dev box is on 22). DOCX needs LibreOffice on the host (bundled in the
 Docker image). Built server entrypoint: `node packages/server/dist/index.js`.
@@ -266,6 +272,41 @@ reverse-proxies the API), `docker-compose.yml`.
 
 ---
 
+## 9b. What the finalization pass changed (read before trusting older notes)
+
+A pass focused on *exercising* the product — driving the web UI in a browser,
+booting the Docker stack, probing the API with bad input — rather than re-reading
+it. Full list in CHANGELOG "Finalization pass". The load-bearing ones:
+
+- **Production B-LT/B-LTA works now.** `buildSealerFromEnv` used to throw "not
+  yet supported"; the HTTP validation-data provider existed and was simply never
+  injected. New env: `FINESIGN_SEAL_TRUST_CERTS`, `FINESIGN_SEAL_CRL_URL`,
+  `FINESIGN_SEAL_OCSP_URL`.
+- **Seal config is validated at boot** (`assertSealableLevel`). It used to fail
+  inside `finalize()` on the last signer's apply, wedging the envelope. If you
+  add a level or a new input, extend that check too.
+- **`EnvelopeRepository` gained `listExpirable(nowIso, limit)`.** Any new adapter
+  must implement it, and the SQL ones keep a denormalized `expires_at` column
+  that has to track the aggregate — the contract test enforces this.
+- **A completed envelope keeps serving its signer session** (read-only), and
+  completion re-mints every recipient a token. `getSession` no longer assumes
+  status `sent`; `getSessionDocument` serves the signed copy after completion and
+  scopes visibility via `completedDocumentsFor`.
+- **`removeField` exists** (draft-only, audited, `field_removed` event) — the
+  first domain mutation that removes rather than appends.
+- **finesign-core exports `SIGNATURE_FONTS` / `isSignatureFont` /
+  `UnknownSignatureFontError`.** Validate caller input against these at the trust
+  boundary; core throws typed errors that the server maps to 400.
+- **`ConsoleLogger` spreads context BEFORE `level`/`msg`** so a context key
+  cannot overwrite the severity. Do not "tidy" that back.
+- **`.dockerignore` needs `**/*.tsbuildinfo`.** Without the `**/`, stale
+  incremental state reached the image, `tsc -b` emitted nothing, and the built
+  image had no entrypoint. Do not relax it.
+- **CSS**: `.pdf-overlay` is `pointer-events: none` so clicks reach the page
+  beneath (that is how fields are dropped). Any interactive control inside it
+  must opt back in — this had silently disabled the signer's text/checkbox
+  fields entirely.
+
 ## 10. Gotchas / non-obvious things
 
 1. **`npm install --legacy-peer-deps` is mandatory** — a transitive
@@ -291,13 +332,14 @@ reverse-proxies the API), `docker-compose.yml`.
 
 Tracked in `docs/BACKLOG.md` + `docs/DOCUSIGN-PARITY.md`. Notable:
 - **PAdES P6g** — link `/DocTimeStamp` into `/AcroForm` (survive PDF normalizers);
-  Adobe/EU-DSS conformance; per-signer certificates; real KMS/HSM key + validation providers.
+  Adobe/EU-DSS conformance; per-signer certificates; real KMS/HSM key providers.
+  (Production B-LT/B-LTA wiring itself is DONE — see §9b.)
 - **Webhooks** — pinned-lookup DNS-rebinding close-out (documented residual);
   automated *time-scheduled* reminders (today reminders are sender-initiated).
 - **Encryption** — envelope *metadata* (SQLite/Postgres rows) is not encrypted, only
   blobs; retention/deletion/legal-hold; a KMS key provider.
-- **Fields** — radio/dropdown, format masks (SSN/email/regex); edit/move/resize placed
-  fields; anchor/text-tag auto-placement.
+- **Fields** — radio/dropdown, format masks (SSN/email/regex); MOVE/RESIZE a placed
+  field (removing one is now supported); anchor/text-tag auto-placement.
 - **Workflow** — templates + bulk send; correct-a-sent-envelope / delegate-reassign.
 - **Other** — branding/white-label, rich HTML email, embedded signing SDK, i18n;
   reusable saved signature; mobile signing polish.
