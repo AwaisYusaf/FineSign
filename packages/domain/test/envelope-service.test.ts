@@ -365,3 +365,81 @@ test("resend is refused once a signer has already signed (DG3)", () => {
   env = svc.applySignature(env, r1, { kind: "typed", name: "Alice", font: "great_vibes" }, [], { ip: null, userAgent: null, consented: true }, issueToken).envelope;
   assert.throws(() => svc.resend(env, r1, issueToken), /already "signed"/);
 });
+
+test("removeField deletes a misplaced field from a draft and audits it", () => {
+  const svc = new EnvelopeService(new FixedClock("2026-07-10T00:00:00.000Z"), new SeededIdGenerator("rm"));
+  let env = svc.createEnvelope({ title: "T", routingType: "sequential", senderName: "S", senderEmail: "s@x.test" });
+  env = svc.addDocument(env, { name: "d.pdf", format: "pdf", originalBlobKey: "k", pageCount: 1 }).envelope;
+  env = svc.addRecipient(env, { name: "A", email: "a@x.test", role: "signer", routingOrder: 1 }).envelope;
+  const doc = env.documents[0].id;
+  const rec = env.recipients[0].id;
+  const box = { page: 1, x: 0.1, y: 0.1, width: 0.2, height: 0.05 };
+  env = svc.addField(env, { documentId: doc, recipientId: rec, kind: "signature", ...box }).envelope;
+  const stray = svc.addField(env, { documentId: doc, recipientId: rec, kind: "initials", ...box });
+  env = stray.envelope;
+  assert.equal(env.fields.length, 2);
+
+  const after = svc.removeField(env, stray.field.id);
+  assert.equal(after.envelope.fields.length, 1);
+  assert.equal(after.envelope.fields[0].kind, "signature");
+  const last = after.envelope.audit[after.envelope.audit.length - 1];
+  assert.equal(last.type, "field_removed");
+  assert.equal(last.data.fieldId, stray.field.id);
+  assert.equal(verifyAuditChain(after.envelope.audit), -1, "audit chain stays intact");
+});
+
+test("removeField rejects an unknown field and refuses to touch a sent envelope", () => {
+  const svc = new EnvelopeService(new FixedClock("2026-07-10T00:00:00.000Z"), new SeededIdGenerator("rm2"));
+  let env = svc.createEnvelope({ title: "T", routingType: "sequential", senderName: "S", senderEmail: "s@x.test" });
+  env = svc.addDocument(env, { name: "d.pdf", format: "pdf", originalBlobKey: "k", pageCount: 1 }).envelope;
+  env = svc.addRecipient(env, { name: "A", email: "a@x.test", role: "signer", routingOrder: 1 }).envelope;
+  const added = svc.addField(env, {
+    documentId: env.documents[0].id, recipientId: env.recipients[0].id,
+    page: 1, x: 0.1, y: 0.1, width: 0.2, height: 0.05, kind: "signature",
+  });
+  env = added.envelope;
+
+  assert.throws(() => svc.removeField(env, "nope"), /field nope not found/);
+
+  // Once sent, the field set a recipient sees must not change under them.
+  const sent = svc.send(env, () => ({ token: "t", tokenHash: "h", expiresAt: "2026-08-01T00:00:00.000Z" }));
+  assert.throws(() => svc.removeField(sent.envelope, added.field.id), /can only change while draft/);
+});
+
+test("completion mints every recipient a fresh token for the finished package", () => {
+  const svc = new EnvelopeService(new FixedClock("2026-07-10T00:00:00.000Z"), new SeededIdGenerator("done"));
+  let env = svc.createEnvelope({ title: "T", routingType: "sequential", senderName: "S", senderEmail: "s@x.test" });
+  env = svc.addDocument(env, { name: "d.pdf", format: "pdf", originalBlobKey: "k", pageCount: 1 }).envelope;
+  env = svc.addRecipient(env, { name: "A", email: "a@x.test", role: "signer", routingOrder: 1 }).envelope;
+  env = svc.addRecipient(env, { name: "Watcher", email: "cc@x.test", role: "cc", routingOrder: 2 }).envelope;
+  env = svc.addField(env, {
+    documentId: env.documents[0].id, recipientId: env.recipients[0].id,
+    page: 1, x: 0.1, y: 0.1, width: 0.2, height: 0.05, kind: "signature",
+  }).envelope;
+
+  let n = 0;
+  const issue = () => ({ token: `tok-${++n}`, tokenHash: `hash-${n}`, expiresAt: "2026-08-01T00:00:00.000Z" });
+  env = svc.send(env, issue).envelope;
+
+  const signer = env.recipients[0];
+  const result = svc.applySignature(
+    env, signer.id,
+    { kind: "typed", name: "A", font: "great_vibes" }, [],
+    { ip: "1.2.3.4", userAgent: "ua", consented: true }, issue
+  );
+  assert.equal(result.envelope.status, "completed");
+
+  // A cc recipient never had a token at all, and the signer's raw token was
+  // never stored — so without a fresh mint neither could reach the copy the
+  // completion mail announces.
+  const copies = result.effects.filter(
+    (e) => e.type === "notify" && e.reason === "completed_copy" && !e.toSender
+  );
+  assert.equal(copies.length, 2);
+  for (const c of copies) {
+    assert.ok(c.type === "notify" && c.token, "every completed-copy notification carries a link token");
+  }
+  const cc = result.envelope.recipients.find((r) => r.role === "cc")!;
+  assert.ok(cc.tokenHash, "the cc recipient now has a token");
+  assert.notEqual(result.envelope.recipients[0].tokenHash, signer.tokenHash, "the signer's token is rotated");
+});

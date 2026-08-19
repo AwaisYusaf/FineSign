@@ -25,4 +25,6 @@ export const FIELD_KINDS = [
   { value: "signature", label: "Signature" },
   { value: "date_signed", label: "Date signed" },
   { value: "initials", label: "Initials" },
+  { value: "text", label: "Text" },
+  { value: "checkbox", label: "Checkbox" },
 ];

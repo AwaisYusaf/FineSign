@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getEnvelope, voidEnvelope, getDevLinks, managementDocUrl, resendRecipient, remindRecipient } from "../api.js";
-import { getApiKey } from "../config.js";
+import {
+  getEnvelope, voidEnvelope, getDevLinks, managementDocUrl, certificateUrl,
+  resendRecipient, remindRecipient, verifyDocument, openAuthedPdf,
+} from "../api.js";
 
 export default function EnvelopeDetail() {
   const { id } = useParams();
@@ -9,6 +11,7 @@ export default function EnvelopeDetail() {
   const [links, setLinks] = useState([]);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [verdicts, setVerdicts] = useState({}); // documentId -> verification result
 
   async function load() {
     try {
@@ -55,11 +58,38 @@ export default function EnvelopeDetail() {
   // (the server enforces this too; the button just avoids obvious dead clicks).
   const canNudge = (r) => env.status === "sent" && (r.status === "notified" || r.status === "viewed");
 
-  function download(documentId) {
-    // Fetch with the API key, then open the blob (the route needs the header).
-    fetch(managementDocUrl(id, documentId), { headers: { authorization: `Bearer ${getApiKey()}` } })
-      .then((r) => r.blob())
-      .then((b) => window.open(URL.createObjectURL(b), "_blank"));
+  async function open_(url) {
+    setError(null);
+    try {
+      await openAuthedPdf(url);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  /** Verify one document's cryptographic seal and show the verdict inline. */
+  async function verify(documentId) {
+    setError(null);
+    setVerdicts((prev) => ({ ...prev, [documentId]: { pending: true } }));
+    try {
+      const r = await verifyDocument(id, documentId);
+      setVerdicts((prev) => ({ ...prev, [documentId]: r }));
+    } catch (e) {
+      setVerdicts((prev) => ({ ...prev, [documentId]: { error: e.message } }));
+    }
+  }
+
+  function verdictLine(v) {
+    if (!v) return null;
+    if (v.pending) return <span className="muted small">Verifying…</span>;
+    if (v.error) return <span className="small error-text">Could not verify: {v.error}</span>;
+    if (v.signatureCount === 0) return <span className="muted small">Not sealed — no cryptographic signature.</span>;
+    return (
+      <span className={`small ${v.valid ? "ok-text" : "error-text"}`}>
+        {v.valid ? "✓ Seal valid" : "✗ Seal INVALID"} · PAdES {v.level} · {v.signatureCount} signature(s)
+        {v.documentTimestamp?.present ? " · archive timestamp" : ""}
+      </span>
+    );
   }
 
   if (error) return <div className="error">{error}</div>;
@@ -107,11 +137,30 @@ export default function EnvelopeDetail() {
         <ul className="link-list">
           {env.documents.map((d) => (
             <li key={d.id}>
-              📄 {d.name} <span className="muted">— {d.pageCount ?? "?"} page(s){d.signedBlobKey ? " · signed" : ""}</span>{" "}
-              <button className="btn ghost small" onClick={() => download(d.id)}>Open</button>
+              <div className="row" style={{ justifyContent: "space-between", gap: 10 }}>
+                <span>
+                  📄 {d.name}{" "}
+                  <span className="muted">— {d.pageCount ?? "?"} page(s){d.signedBlobKey ? " · signed" : ""}</span>
+                </span>
+                <span className="row" style={{ gap: 6 }}>
+                  <button className="btn ghost small" onClick={() => open_(managementDocUrl(id, d.id))}>Open</button>
+                  <button className="btn ghost small" onClick={() => verify(d.id)}>Verify seal</button>
+                </span>
+              </div>
+              {verdicts[d.id] && <div style={{ marginTop: 4 }}>{verdictLine(verdicts[d.id])}</div>}
             </li>
           ))}
         </ul>
+        {env.status === "completed" && (
+          <p style={{ marginTop: 14 }}>
+            <button className="btn ghost small" onClick={() => open_(certificateUrl(id))}>
+              📜 Certificate of completion
+            </button>
+            <span className="muted small" style={{ marginLeft: 8 }}>
+              Signers, timestamps, document hashes, and the audit chain.
+            </span>
+          </p>
+        )}
       </div>
 
       {links.length > 0 && (

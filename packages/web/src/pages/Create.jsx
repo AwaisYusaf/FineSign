@@ -1,14 +1,21 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  createEnvelope, addDocument, addRecipient, addField, sendEnvelope,
+  createEnvelope, addDocument, addRecipient, addField, removeField, sendEnvelope,
   getDevLinks, managementDocUrl,
 } from "../api.js";
 import { getApiKey, FIELD_KINDS } from "../config.js";
 import PdfView from "../components/PdfView.jsx";
 
 const STEPS = ["Details", "Documents", "Recipients", "Place fields", "Send"];
-const DEFAULT_SIZE = { signature: { w: 0.24, h: 0.045 }, initials: { w: 0.12, h: 0.045 }, date_signed: { w: 0.16, h: 0.03 } };
+// Default drop size per field kind, as fractions of the displayed page.
+const DEFAULT_SIZE = {
+  signature: { w: 0.24, h: 0.045 },
+  initials: { w: 0.12, h: 0.045 },
+  date_signed: { w: 0.16, h: 0.03 },
+  text: { w: 0.24, h: 0.03 },
+  checkbox: { w: 0.03, h: 0.022 },
+};
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -87,7 +94,7 @@ export default function Create() {
       if (!activeRecipient) setActiveRecipient(e.recipients[e.recipients.length - 1].id);
     });
 
-  const placeField = (documentId, page, frac) =>
+  const dropField = (documentId, page, frac) =>
     guard(async () => {
       if (!activeRecipient) throw new Error("Pick a recipient to assign the field to first.");
       const d = DEFAULT_SIZE[activeKind];
@@ -98,6 +105,11 @@ export default function Create() {
         x: frac.x, y: frac.y, width, height, kind: activeKind,
       });
       setEnv(e);
+    });
+
+  const deleteField = (fieldId) =>
+    guard(async () => {
+      setEnv(await removeField(env.id, fieldId));
     });
 
   const doSend = () =>
@@ -124,18 +136,23 @@ export default function Create() {
       env.fields
         .filter((f) => f.documentId === documentId && f.page === page)
         .map((f) => (
-          <div
+          <button
+            type="button"
             key={f.id}
-            className={`field-box${f.kind === "date_signed" ? " date" : ""}`}
-            title={`${f.kind} — ${env.recipients.find((r) => r.id === f.recipientId)?.name ?? ""}`}
+            className={`field-box placed${f.kind === "date_signed" ? " date" : ""}`}
+            title={`${f.kind} — ${env.recipients.find((r) => r.id === f.recipientId)?.name ?? ""} · click to remove`}
             style={{
               left: `${f.x * 100}%`, top: `${f.y * 100}%`,
               width: `${f.width * 100}%`, height: `${f.height * 100}%`,
               borderColor: recipientColor(f.recipientId),
             }}
+            // The page is the drop target, so removing a field must not also drop
+            // a fresh one where the click landed.
+            onClick={(e) => { e.stopPropagation(); deleteField(f.id); }}
           >
-            {f.kind === "date_signed" ? "date" : f.kind}
-          </div>
+            <span className="field-label">{f.kind === "date_signed" ? "date" : f.kind}</span>
+            <span className="field-remove" aria-hidden="true">×</span>
+          </button>
         ));
   }
 
@@ -231,7 +248,7 @@ export default function Create() {
       {step === 3 && env && (
         <div className="card">
           <h2>Place fields</h2>
-          <p className="muted">Pick a recipient and field type, then click on the document to drop a field.</p>
+          <p className="muted">Pick a recipient and field type, then click on the document to drop a field. Click a placed field to remove it.</p>
           <div className="toolbar">
             <label className="field"><span>Document</span>
               <select className="input" value={activeDoc ?? ""} onChange={(e) => setActiveDoc(e.target.value)}>
@@ -253,7 +270,7 @@ export default function Create() {
             <PdfView
               key={activeDoc}
               loadBytes={docLoader(activeDoc)}
-              onPageClick={(page, frac) => placeField(activeDoc, page, frac)}
+              onPageClick={(page, frac) => dropField(activeDoc, page, frac)}
               renderOverlay={fieldsOverlay(activeDoc)}
             />
           )}

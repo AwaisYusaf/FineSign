@@ -567,3 +567,149 @@ test("DG3: the sweep drains a backlog larger than one batch", async () => {
 
   await server.close();
 });
+
+// ── After completion, a recipient can actually GET the copy they were promised ─
+// Regression: the completion mail told every recipient "a signed copy is
+// available", but carried no link, and their token 409'd because `getSession`
+// required status `sent`. A cc recipient never had a token at all.
+
+test("completion: a signer's link keeps working and serves the signed copy", async () => {
+  const { server, mailer } = await setup();
+  const { docId, token } = await sendOneSigner(server, mailer);
+
+  const signed = await server.inject({
+    method: "POST",
+    url: `/sign/${token}/apply`,
+    payload: { signature: { kind: "typed", name: "Alice", font: "great_vibes" }, consent: true },
+  });
+  assert.equal(j(signed).status, "completed");
+
+  // The completion mail must carry a link the recipient can follow.
+  const completionMail = mailer.to("alice@x.test").find((m) => m.subject.startsWith("Completed"));
+  assert.ok(completionMail?.link, "the completed-copy mail carries a link");
+  const freshToken = tokenFromLink(completionMail.link);
+
+  const session = await server.inject({ method: "GET", url: `/sign/${freshToken}` });
+  assert.equal(session.statusCode, 200, session.payload);
+  assert.equal(j(session).status, "completed");
+  assert.equal(j(session).documents.length, 1);
+  assert.deepEqual(j(session).documents[0].fields, [], "nothing left to fill in");
+
+  const doc = await server.inject({ method: "GET", url: `/sign/${freshToken}/documents/${docId}` });
+  assert.equal(doc.statusCode, 200);
+  assert.equal(doc.headers["content-type"], "application/pdf");
+  assert.match(String(doc.headers["content-disposition"]), /\.signed\.pdf/);
+
+  // It must be the SIGNED artifact, not the blank original they signed on top of.
+  const senderCopy = await mgmt(server, "GET", `/api/envelopes/${j(session).envelopeId}/documents/${docId}/download`);
+  assert.equal(doc.rawPayload.length, senderCopy.rawPayload.length);
+
+  await server.close();
+});
+
+test("completion: a cc recipient is given a link to the finished package", async () => {
+  const { server, mailer } = await setup();
+
+  let res = await mgmt(server, "POST", "/api/envelopes", { title: "T", senderName: "Ops", senderEmail: "ops@co.test", routingType: "sequential" });
+  const envId = j(res).id;
+  const pdf = await makePdf(1);
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/documents`, { name: "d.pdf", format: "pdf", contentBase64: Buffer.from(pdf).toString("base64") });
+  const docId = j(res).documents[0].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Alice", email: "alice@x.test", role: "signer", routingOrder: 1 });
+  const alice = j(res).recipients[0].id;
+  await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Watcher", email: "cc@x.test", role: "cc", routingOrder: 2 });
+  await mgmt(server, "POST", `/api/envelopes/${envId}/fields`, { documentId: docId, recipientId: alice, page: 1, x: 0.1, y: 0.8, width: 0.3, height: 0.05, kind: "signature" });
+  await mgmt(server, "POST", `/api/envelopes/${envId}/send`);
+
+  const token = tokenFromLink(mailer.to("alice@x.test")[0].link);
+  await server.inject({
+    method: "POST",
+    url: `/sign/${token}/apply`,
+    payload: { signature: { kind: "typed", name: "Alice", font: "great_vibes" }, consent: true },
+  });
+
+  // A cc recipient hears nothing until completion — then gets the whole package.
+  const ccMail = mailer.to("cc@x.test");
+  assert.equal(ccMail.length, 1);
+  assert.ok(ccMail[0].link, "the cc recipient gets a link");
+  const ccSession = await server.inject({ method: "GET", url: `/sign/${tokenFromLink(ccMail[0].link)}` });
+  assert.equal(ccSession.statusCode, 200, ccSession.payload);
+  assert.equal(j(ccSession).documents.length, 1);
+
+  await server.close();
+});
+
+test("completion: a signer cannot reach a document they were never party to", async () => {
+  const { server, mailer } = await setup();
+
+  let res = await mgmt(server, "POST", "/api/envelopes", { title: "T", senderName: "Ops", senderEmail: "ops@co.test", routingType: "sequential" });
+  const envId = j(res).id;
+  const pdf = await makePdf(1);
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/documents`, { name: "mine.pdf", format: "pdf", contentBase64: Buffer.from(pdf).toString("base64") });
+  const mine = j(res).documents[0].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/documents`, { name: "theirs.pdf", format: "pdf", contentBase64: Buffer.from(pdf).toString("base64") });
+  const theirs = j(res).documents[1].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Alice", email: "alice@x.test", role: "signer", routingOrder: 1 });
+  const alice = j(res).recipients[0].id;
+  await mgmt(server, "POST", `/api/envelopes/${envId}/fields`, { documentId: mine, recipientId: alice, page: 1, x: 0.1, y: 0.8, width: 0.3, height: 0.05, kind: "signature" });
+  await mgmt(server, "POST", `/api/envelopes/${envId}/send`);
+
+  const token = tokenFromLink(mailer.to("alice@x.test")[0].link);
+  await server.inject({
+    method: "POST",
+    url: `/sign/${token}/apply`,
+    payload: { signature: { kind: "typed", name: "Alice", font: "great_vibes" }, consent: true },
+  });
+  const fresh = tokenFromLink(mailer.to("alice@x.test").find((m) => m.subject.startsWith("Completed"))!.link);
+
+  // Completion is not a reason to widen what a recipient may see.
+  const session = await server.inject({ method: "GET", url: `/sign/${fresh}` });
+  assert.deepEqual(j(session).documents.map((d: { id: string }) => d.id), [mine]);
+  const denied = await server.inject({ method: "GET", url: `/sign/${fresh}/documents/${theirs}` });
+  assert.equal(denied.statusCode, 404, denied.payload);
+
+  await server.close();
+});
+
+test("fields: a misplaced field can be removed from a draft, but not after send", async () => {
+  const { server, mailer } = await setup();
+
+  let res = await mgmt(server, "POST", "/api/envelopes", { title: "T", senderName: "Ops", senderEmail: "ops@co.test", routingType: "sequential" });
+  const envId = j(res).id;
+  const pdf = await makePdf(1);
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/documents`, { name: "d.pdf", format: "pdf", contentBase64: Buffer.from(pdf).toString("base64") });
+  const docId = j(res).documents[0].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Alice", email: "alice@x.test", role: "signer", routingOrder: 1 });
+  const alice = j(res).recipients[0].id;
+  const box = { documentId: docId, recipientId: alice, page: 1, x: 0.1, y: 0.8, width: 0.3, height: 0.05 };
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/fields`, { ...box, kind: "signature" });
+  const keep = j(res).fields[0].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/fields`, { ...box, y: 0.5, kind: "initials" });
+  const stray = j(res).fields[1].id;
+
+  res = await server.inject({
+    method: "DELETE",
+    url: `/api/envelopes/${envId}/fields/${stray}`,
+    headers: { authorization: `Bearer ${API_KEY}` },
+  });
+  assert.equal(res.statusCode, 200, res.payload);
+  assert.deepEqual(j(res).fields.map((f: { id: string }) => f.id), [keep]);
+
+  const missing = await server.inject({
+    method: "DELETE",
+    url: `/api/envelopes/${envId}/fields/does-not-exist`,
+    headers: { authorization: `Bearer ${API_KEY}` },
+  });
+  assert.equal(missing.statusCode, 404);
+
+  await mgmt(server, "POST", `/api/envelopes/${envId}/send`);
+  const afterSend = await server.inject({
+    method: "DELETE",
+    url: `/api/envelopes/${envId}/fields/${keep}`,
+    headers: { authorization: `Bearer ${API_KEY}` },
+  });
+  assert.equal(afterSend.statusCode, 409, "a sent envelope's fields are immutable");
+  void mailer;
+
+  await server.close();
+});

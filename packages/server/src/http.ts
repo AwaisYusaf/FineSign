@@ -273,6 +273,11 @@ export async function createHttpServer(app: EnvelopeApp, options: HttpOptions): 
     return reply.code(201).send(env);
   });
 
+  server.delete("/api/envelopes/:id/fields/:fieldId", async (req) => {
+    const { id, fieldId } = req.params as { id: string; fieldId: string };
+    return app.removeField(id, fieldId);
+  });
+
   server.post("/api/envelopes/:id/send", async (req) => {
     const { id } = req.params as { id: string };
     const b = req.body as { expiresInDays?: number } | undefined;

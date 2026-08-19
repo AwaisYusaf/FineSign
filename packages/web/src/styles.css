@@ -95,12 +95,26 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
 .pdf-page { position: relative; box-shadow: var(--shadow); border-radius: 4px; overflow: hidden; }
 .pdf-page.placing { cursor: crosshair; }
 .pdf-page canvas { display: block; }
+/* The overlay must not swallow clicks meant for the page beneath (that is how a
+   field gets dropped where the sender clicks), so it stays click-through — but
+   the controls INSIDE it are interactive and have to opt back in. Without this
+   the signer's text inputs and checkboxes cannot be used at all, and a placed
+   field cannot be clicked to remove it. */
 .pdf-overlay { position: absolute; inset: 0; pointer-events: none; }
+.pdf-overlay .field-box.placed,
+.pdf-overlay .field-box.field-input,
+.pdf-overlay .field-box.field-check { pointer-events: auto; }
 .field-box { position: absolute; border: 1.5px solid var(--brand); background: rgba(43, 89, 255, 0.12); border-radius: 3px; font-size: 10px; color: var(--brand-ink); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .field-box.date { border-color: var(--ok); background: rgba(18, 145, 90, 0.12); color: var(--ok); }
 .field-box.field-input { background: rgba(43, 89, 255, 0.06); color: #111; padding: 0 4px; font-size: inherit; }
 .field-box.field-check { background: rgba(43, 89, 255, 0.06); }
 .field-box.field-check input { width: 90%; height: 90%; margin: 0; cursor: pointer; }
+/* A placed field in the sender's editor is a button: click it to remove. */
+.field-box.placed { padding: 0; cursor: pointer; font-family: inherit; gap: 2px; }
+.field-box.placed:hover { background: rgba(214, 45, 45, 0.14); border-color: var(--danger) !important; color: var(--danger); }
+.field-box.placed .field-remove { display: none; font-weight: 700; }
+.field-box.placed:hover .field-remove { display: inline; }
+.field-box.placed:hover .field-label { display: none; }
 .pdf-error { color: var(--danger); padding: 12px; }
 
 .link-list { list-style: none; padding: 0; margin: 0; }
@@ -108,3 +122,7 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
 
 .toolbar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; padding: 12px; background: #f8faff; border: 1px solid var(--line); border-radius: 10px; }
 .toolbar label.field { margin-bottom: 0; }
+
+.small { font-size: 12px; }
+.ok-text { color: var(--ok); }
+.error-text { color: var(--danger); }

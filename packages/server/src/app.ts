@@ -124,6 +124,9 @@ function redactSubscription(sub: WebhookSubscription): RedactedSubscription {
 export interface SessionView {
   envelopeId: string;
   title: string;
+  /** Envelope status. `sent` is the signing state; `completed` turns the session
+   *  into a read-only view of the finished package. */
+  status: string;
   recipient: { id: string; name: string; role: RecipientRole };
   /** True when this recipient must pass an access-code challenge first. */
   authRequired: boolean;
@@ -286,6 +289,14 @@ export class EnvelopeApp {
     return envelope;
   }
 
+  /** Remove a placed field from a draft (a misplaced click is not a dead end). */
+  async removeField(envelopeId: string, fieldId: string): Promise<Envelope> {
+    const env = await this.load(envelopeId);
+    const { envelope } = this.svc.removeField(env, fieldId);
+    await this.deps.repo.save(envelope);
+    return envelope;
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   async send(envelopeId: string, options: { expiresInDays?: number } = {}): Promise<Envelope> {
@@ -440,6 +451,10 @@ export class EnvelopeApp {
 
   async getSession(rawToken: string): Promise<SessionView> {
     const { envelope, recipientId } = await this.resolveToken(rawToken);
+    // A completed envelope keeps serving this session read-only: the recipient is
+    // entitled to the finished package they were told about, and their token is
+    // the only credential they hold. Every other status is a dead end.
+    if (envelope.status === "completed") return this.completedSession(envelope, recipientId);
     if (envelope.status !== "sent") {
       throw new ConflictError("ENVELOPE_NOT_SENT", `envelope is "${envelope.status}"`);
     }
@@ -452,6 +467,7 @@ export class EnvelopeApp {
       return {
         envelopeId: envelope.id,
         title: envelope.title,
+        status: envelope.status,
         recipient: { id: current.id, name: current.name, role: current.role },
         authRequired: true,
         authenticated: false,
@@ -470,6 +486,7 @@ export class EnvelopeApp {
     return {
       envelopeId: viewed.id,
       title: viewed.title,
+      status: viewed.status,
       recipient: { id: rec.id, name: rec.name, role: rec.role },
       authRequired: rec.authMethod !== "none",
       authenticated: true,
@@ -484,6 +501,44 @@ export class EnvelopeApp {
             .filter((f) => f.documentId === d.id)
             .map((f) => ({ id: f.id, page: f.page, x: f.x, y: f.y, width: f.width, height: f.height, kind: f.kind })),
         })),
+    };
+  }
+
+  /**
+   * Which documents of a COMPLETED envelope this recipient may download.
+   *
+   * Deliberately not "all of them": during signing a recipient sees only the
+   * documents carrying their own fields, and completion is not a reason to widen
+   * that. A `cc` recipient is the exception — they have no fields by definition,
+   * and receiving the finished package is their entire role — so they get the
+   * whole set, which is what they were always going to be sent.
+   */
+  private completedDocumentsFor(env: Envelope, recipientId: string): Envelope["documents"] {
+    const rec = env.recipients.find((r) => r.id === recipientId);
+    if (rec?.role === "cc") return env.documents;
+    const mine = new Set(env.fields.filter((f) => f.recipientId === recipientId).map((f) => f.documentId));
+    return env.documents.filter((d) => mine.has(d.id));
+  }
+
+  /** The read-only session a recipient sees once the envelope is completed: the
+   *  finished, sealed documents, with no fields left to fill. */
+  private completedSession(env: Envelope, recipientId: string): SessionView {
+    const rec = env.recipients.find((r) => r.id === recipientId)!;
+    return {
+      envelopeId: env.id,
+      title: env.title,
+      status: env.status,
+      recipient: { id: rec.id, name: rec.name, role: rec.role },
+      authRequired: rec.authMethod !== "none",
+      // The signing gate is spent; the token itself authorizes this read.
+      authenticated: true,
+      consent: { version: ESIGN_CONSENT.version, disclosure: ESIGN_CONSENT.disclosure },
+      documents: this.completedDocumentsFor(env, recipientId).map((d) => ({
+        id: d.id,
+        name: d.name,
+        pageCount: d.pageCount,
+        fields: [],
+      })),
     };
   }
 
@@ -522,15 +577,21 @@ export class EnvelopeApp {
     if (!this.svc.isAuthenticated(rec)) {
       throw new AuthorizationError("access code required before viewing documents", { recipientId });
     }
-    const carriesTheirField = envelope.fields.some(
-      (f) => f.recipientId === recipientId && f.documentId === documentId
-    );
-    const doc = envelope.documents.find((d) => d.id === documentId);
-    if (!doc || !carriesTheirField || !doc.pdfBlobKey) {
-      throw new NotFoundError("document not available for this signer");
-    }
-    const bytes = await this.deps.blobs.get(doc.pdfBlobKey);
-    return { bytes, filename: doc.name.replace(/\.(docx)$/i, ".pdf") };
+    // Once completed, this serves the SIGNED (and sealed, certificate-bearing)
+    // copy — the artifact the recipient was told was available. Before that it is
+    // the pre-signature PDF they review and sign on top of.
+    const completed = envelope.status === "completed";
+    const allowed = completed
+      ? this.completedDocumentsFor(envelope, recipientId)
+      : envelope.documents.filter((d) =>
+          envelope.fields.some((f) => f.recipientId === recipientId && f.documentId === d.id)
+        );
+    const doc = allowed.find((d) => d.id === documentId);
+    const key = completed ? (doc?.signedBlobKey ?? doc?.pdfBlobKey) : doc?.pdfBlobKey;
+    if (!doc || !key) throw new NotFoundError("document not available for this signer");
+    const bytes = await this.deps.blobs.get(key);
+    const base = doc.name.replace(/\.(docx)$/i, ".pdf");
+    return { bytes, filename: completed ? base.replace(/\.pdf$/i, ".signed.pdf") : base };
   }
 
   async applySignature(
@@ -747,7 +808,9 @@ export class EnvelopeApp {
         break;
       case "completed_copy":
         subject = `Completed: ${env.title}`;
-        text = `${name}, "${env.title}" is complete. A signed copy is available.`;
+        text = link
+          ? `${name}, "${env.title}" is complete. Your signed copy is available at the link below.`
+          : `${name}, "${env.title}" is complete. A signed copy is available in your FineSign console.`;
         break;
       case "declined":
         subject = `Declined: ${env.title}`;

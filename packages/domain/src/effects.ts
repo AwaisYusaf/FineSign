@@ -15,7 +15,9 @@ export interface NotifyEffect {
   recipientId?: string;
   /** Notify the envelope sender instead of a recipient. */
   toSender?: boolean;
-  /** Raw signing token for the link (present only for `your_turn`). Never stored. */
+  /** Raw token for the link. Present for the notifications that need one: the
+   *  turn/reminder/resend prompts, and the completed copy (a fresh read-only
+   *  token so a recipient can fetch the finished package). Never stored. */
   token?: string;
   /** Free-text context, e.g. the decline reason. Safe to surface in the message. */
   note?: string;

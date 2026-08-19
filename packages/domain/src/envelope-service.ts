@@ -271,6 +271,25 @@ export class EnvelopeService {
     return { envelope: this.audit(withField, "field_added", "sender", { fieldId: field.id, kind: field.kind }), field };
   }
 
+  /**
+   * Remove a placed field while the envelope is still a draft.
+   *
+   * Field placement is a click-and-drop gesture, so a misplaced field is a
+   * routine mistake; without this the only remedy was to abandon the draft.
+   * Draft-only and audited, so a sent envelope's fields stay immutable — a
+   * recipient must never see the field set change under them.
+   */
+  removeField(env: Envelope, fieldId: string): { envelope: Envelope; field: Field } {
+    this.requireDraft(env);
+    const field = env.fields.find((f) => f.id === fieldId);
+    if (!field) throw new NotFoundError(`field ${fieldId} not found`);
+    const without: Envelope = { ...env, fields: env.fields.filter((f) => f.id !== fieldId) };
+    return {
+      envelope: this.audit(without, "field_removed", "sender", { fieldId, kind: field.kind }),
+      field,
+    };
+  }
+
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
   /**
@@ -480,8 +499,21 @@ export class EnvelopeService {
       effects.push({ type: "finalize" });
       // Deliver the completed copy to everyone: the sender AND every recipient.
       effects.push({ type: "notify", toSender: true, reason: "completed_copy" });
-      for (const r of next.recipients) {
-        effects.push({ type: "notify", recipientId: r.id, reason: "completed_copy" });
+      // Every recipient gets a FRESH token with the completed copy. Raw tokens are
+      // never stored, so the link a signer originally received cannot be rebuilt
+      // here — and `cc` recipients never had one at all. Without this the
+      // "your signed copy is available" mail names no way to actually get it.
+      // The mint is deliberate: the envelope is terminal, so the new token grants
+      // read-only access to the finished package and nothing else.
+      for (const r of [...next.recipients]) {
+        const issued = issueToken();
+        next = {
+          ...next,
+          recipients: next.recipients.map((x) =>
+            x.id === r.id ? { ...x, tokenHash: issued.tokenHash, tokenExpiresAt: issued.expiresAt } : x
+          ),
+        };
+        effects.push({ type: "notify", recipientId: r.id, reason: "completed_copy", token: issued.token });
       }
     } else {
       // Advance routing: notify whoever is newly active.

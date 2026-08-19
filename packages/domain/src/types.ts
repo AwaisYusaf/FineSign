@@ -103,6 +103,7 @@ export type AuditEventType =
   | "document_added"
   | "recipient_added"
   | "field_added"
+  | "field_removed"
   | "envelope_sent"
   | "recipient_notified"
   | "recipient_authenticated"

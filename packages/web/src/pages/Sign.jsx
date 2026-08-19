@@ -72,6 +72,33 @@ export default function Sign() {
   }
   if (!session && !error) return <p className="muted">Loading your documents…</p>;
 
+  // A completed envelope keeps this link alive as a read-only view of the
+  // finished package — this is where the "your signed copy is available" mail
+  // lands, so it has to actually hand over the documents.
+  if (session?.status === "completed") {
+    return (
+      <div className="card narrow">
+        <h2>✅ {session.title}</h2>
+        <p className="muted">
+          This agreement is complete. Your signed copy is below — each file includes the
+          certificate of completion.
+        </p>
+        {session.documents.length === 0 ? (
+          <p className="muted">No documents are available for you on this agreement.</p>
+        ) : (
+          <ul className="link-list">
+            {session.documents.map((d) => (
+              <li key={d.id}>
+                📄 <a href={signerDocUrl(token, d.id)} target="_blank" rel="noreferrer">{d.name}</a>{" "}
+                <span className="muted">— {d.pageCount ?? "?"} page(s)</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   if (result) {
     return (
       <div className="card narrow">
@@ -83,7 +110,10 @@ export default function Sign() {
         ) : result.status === "completed" ? (
           <>
             <h2>✅ All done</h2>
-            <p className="muted">Thanks, {session.recipient.name}. Everyone has signed and the agreement is complete.</p>
+            <p className="muted">
+              Thanks, {session.recipient.name}. Everyone has signed and the agreement is complete.
+              We&apos;ve emailed you a link to your signed copy.
+            </p>
           </>
         ) : (
           <>
