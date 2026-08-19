@@ -2,7 +2,13 @@ node_modules
 **/node_modules
 **/dist
 packages/web/dist
-*.tsbuildinfo
+# `**/` matters: .dockerignore patterns do not cross `/`, so a bare
+# `*.tsbuildinfo` matched only the repo root and let every packages/*/ one
+# through. `tsc -b` then read that stale incremental state, concluded the build
+# was current, emitted no dist/ — which IS excluded above — and produced an image
+# whose entrypoint did not exist. Broken for anyone building from a tree they had
+# already built in, i.e. every maintainer.
+**/*.tsbuildinfo
 .finesign-data
 .git
 .env

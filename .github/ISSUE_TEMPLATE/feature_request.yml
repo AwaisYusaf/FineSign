@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a capability FineSign does not have yet.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [docs/BACKLOG.md](../blob/main/docs/BACKLOG.md) and
+        [docs/DOCUSIGN-PARITY.md](../blob/main/docs/DOCUSIGN-PARITY.md) first —
+        it may already be filed with a rationale.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that FineSign makes hard or impossible?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: A sketch is fine. Note which package(s) you think it touches.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including "I worked around it by …".

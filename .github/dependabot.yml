@@ -1,0 +1,26 @@
+# FineSign handles untrusted uploads and ships crypto, so dependency updates
+# matter. Grouped and weekly to keep the PR volume reviewable.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-tooling:
+        patterns: ["eslint*", "@eslint/*", "typescript*", "tsx", "vite", "@vitejs/*", "@types/*"]
+      # Anything that touches PDF bytes, crypto, or the HTTP surface is reviewed
+      # on its own rather than batched into a group.
+      minor-and-patch:
+        patterns: ["*"]
+        exclude-patterns: ["pdf-lib", "pkijs", "asn1js", "node-forge", "@signpdf/*", "fastify", "@fastify/*", "better-sqlite3"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

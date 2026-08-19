@@ -165,5 +165,6 @@ npm run typecheck
 
 ## License
 
-MIT. Bundled fonts (Dancing Script, Great Vibes, Pacifico, Pinyon Script) are
-under the SIL Open Font License.
+[Apache-2.0](LICENSE) — the same license as the rest of FineSign. Bundled fonts
+(Dancing Script, Great Vibes, Pacifico, Pinyon Script) are under the SIL Open
+Font License.

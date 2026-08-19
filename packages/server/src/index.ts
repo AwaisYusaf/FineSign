@@ -120,5 +120,31 @@ if (require.main === module) {
     setInterval(() => {
       void app.sweepExpired().catch((e) => logger.warn({ err: String(e) }, "expiry sweep tick failed"));
     }, sweepMs).unref();
+
+    // Graceful shutdown. `docker compose down`, a Kubernetes rollout and Ctrl-C
+    // all send SIGTERM/SIGINT; without a handler the process dies immediately —
+    // in the middle of stamping a PDF, or between the two writes that keep an
+    // envelope row and its token index consistent. Fastify stops accepting new
+    // connections and drains in-flight requests first, then the SQLite handle is
+    // closed so WAL state lands cleanly.
+    let shuttingDown = false;
+    const shutdown = async (signal: string): Promise<void> => {
+      if (shuttingDown) return; // a second Ctrl-C should not re-enter this
+      shuttingDown = true;
+      logger.info({ signal }, "shutting down — draining in-flight requests");
+      try {
+        await server.close();
+        const repo = deps.repo as { close?: () => void };
+        if (typeof repo.close === "function") repo.close();
+        logger.info({ signal }, "shutdown complete");
+        process.exit(0);
+      } catch (e) {
+        logger.error({ signal, err: e instanceof Error ? e.message : String(e) }, "shutdown failed");
+        process.exit(1);
+      }
+    };
+    for (const signal of ["SIGTERM", "SIGINT"] as const) {
+      process.on(signal, () => void shutdown(signal));
+    }
   })();
 }

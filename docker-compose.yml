@@ -24,8 +24,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+    # Wait for the API to pass its health check, so the SPA is never served
+    # against a backend that is still starting (or has failed to start at all).
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     ports:
       - "8080:80"
     restart: unless-stopped

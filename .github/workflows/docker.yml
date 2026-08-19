@@ -1,0 +1,41 @@
+# Self-hosting is a headline feature, so the images have to keep building. This
+# builds both and boots the stack far enough to answer /health — a Dockerfile
+# that compiles but exits on start is still broken for the user.
+name: docker
+
+on:
+  push:
+    branches: [main]
+    paths: ["Dockerfile", "Dockerfile.web", "docker-compose.yml", "docker/**", "packages/**", "package*.json"]
+  pull_request:
+    paths: ["Dockerfile", "Dockerfile.web", "docker-compose.yml", "docker/**", "packages/**", "package*.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write a .env for the build
+        run: echo "FINESIGN_SENDER_API_KEY=ci-only-key-0123456789abcdef" > .env
+
+      - name: Build and start
+        run: docker compose up --build --detach --wait --wait-timeout 300
+
+      - name: The API answers through the web proxy
+        run: |
+          curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors \
+            http://localhost:8080/api/envelopes -H "authorization: Bearer ci-only-key-0123456789abcdef"
+          curl --fail --silent --show-error http://localhost:8080/openapi.json > /dev/null
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop
+        if: always()
+        run: docker compose down --volumes

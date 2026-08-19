@@ -80,11 +80,36 @@ by priority within each milestone. `[ ]` todo · `[~]` in progress · `[x]` done
           combines CRL + OCSP (revoked wins); `source: crl|ocsp|both`.
     - [x] P6 HTTP validation-data provider — `createHttpValidationDataProvider`
           (CDP/AIA fetch + injectable fetch), completing the port (in-process + HTTP).
+    - [x] P6h production B-LT/B-LTA wiring — the HTTP validation-data provider is
+          now injected for a PKCS#12 seal (CDP/AIA, with FINESIGN_SEAL_CRL_URL /
+          _OCSP_URL overrides) and `FINESIGN_SEAL_TRUST_CERTS` supplies the CA
+          anchor. Every level requirement is checked at BOOT, not at completion.
     - [ ] P6g link the DocTimeStamp into /AcroForm (survive normalizers / Adobe) —
           needs a scoped relaxation of the coverage catalog check; deferred.
     - [ ] P6 bind B-LTA revocation material to the DocTimeStamp-protected DSS bytes.
   - [ ] P7b external-validator conformance beyond OpenSSL (Adobe Acrobat + EU DSS)
   - [ ] per-signer certificates (each signer's own X.509, multiple sig fields)
+
+## Finalization pass (open-source readiness)
+- [x] F.1 Signer signature input validated at the boundary — an unknown typed font
+      or a malformed image was an opaque 500; both are now 400s.
+- [x] F.2 PAdES seal configuration validated at boot (a level whose inputs were
+      missing failed inside `finalize()`, wedging the envelope) + the dev path no
+      longer ignores `FINESIGN_PADES_LEVEL`.
+- [x] F.3 Notification delivery is best-effort after the save, so a transient SMTP
+      failure no longer 500s a committed transition (interim until R.2's outbox).
+- [x] F.4 `listExpirable` on the repository port — the expiry sweep works in
+      bounded batches off an index instead of scanning the whole table each tick.
+- [x] F.5 Recipients can reach the completed package (fresh token + read-only
+      session + the signed artifact); `cc` recipients previously had no route at all.
+- [x] F.6 Remove a placed field (`removeField` + `DELETE .../fields/:fieldId` + UI).
+- [x] F.7 Text/checkbox field placement, certificate + verify buttons, list paging.
+- [x] F.8 Overlay controls were `pointer-events: none` — the signer's text and
+      checkbox fields had never been usable in a browser.
+- [x] F.9 `ConsoleLogger` no longer lets a context key overwrite the severity.
+- [x] F.10 CI (`.github/workflows`): the gate on Node 20 + 22, and a Docker job
+      that builds and boots the self-host stack.
+- [x] F.11 Graceful shutdown (SIGTERM/SIGINT drain + close the SQLite handle).
 
 ## Cross-cutting / later
 - [x] X.1 Postgres repository adapter (over an injected query seam; pg-mem contract test)
@@ -92,7 +117,8 @@ by priority within each milestone. `[ ]` todo · `[~]` in progress · `[x]` done
       mock S3 server; the `BlobStore` port + LocalFsBlobStore already cover self-hosting)
 - [x] X.3 SMTP mailer adapter (nodemailer v9, injected transport)
 - [x] X.4 OpenAPI spec + Swagger UI (`/openapi.json`, `/docs`)
-- [ ] X.5 Docker compose for one-command self-host
+- [x] X.5 Docker compose for one-command self-host (non-root images, health-gated
+      startup, security headers on the SPA, CI builds + boots the stack)
 - [ ] X.6 Port core's AI signer-field detector as optional `@finesign/detect-ai`
 - [ ] X.7 Sandbox DOCX conversion (seccomp/container, no-network, macros off) — S4 follow-up
 - [ ] X.8 Full sender identity/auth (accounts, orgs, per-sender scoping) — supersedes the M4 API-key guard

@@ -1,0 +1,41 @@
+# The gate is the project's definition of done (FACTORY §1.2), so CI runs exactly
+# it — no separate, drifting CI-only checklist.
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from package.json engines, plus the version the Docker image
+        # ships. A break on either is a break for someone self-hosting.
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # --legacy-peer-deps is mandatory: a transitive unpdf/@napi-rs/canvas peer
+      # conflict breaks a plain install (see README).
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Gate
+        run: npm run gate

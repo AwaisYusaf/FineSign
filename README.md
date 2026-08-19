@@ -16,7 +16,9 @@ agreement domain, a hardened Fastify API, and a React web UI.
   completion**.
 - **Cryptographic signatures (PAdES)** — seal completed PDFs at **B-B / B-T / B-LT
   / B-LTA** (RFC 3161 timestamps, DSS with CRL/OCSP, archive timestamps) so they
-  verify offline for decades. Independently validated with OpenSSL.
+  verify offline for decades. Independently validated with OpenSSL. The long-term
+  levels need a CA-issued certificate that publishes revocation data plus a TSA;
+  the server checks that at boot rather than failing at completion.
 - **Legally-credible signing** — ESIGN/UETA electronic-signature **consent**
   capture, **signer identity** (IP + user-agent + timestamps), and optional
   per-recipient **access-code** authentication with brute-force lockout.
@@ -63,6 +65,9 @@ npm run dev  --workspace @finesign/web    # web UI on :5173
 > `--legacy-peer-deps` is required (a transitive `unpdf`/`@napi-rs/canvas` peer
 > conflict otherwise breaks install).
 
+Add `FINESIGN_DEV_EXPOSE_TOKENS=true` to `.env` for local clicking, so the UI can
+show signer links instead of you fishing them out of the mail log.
+
 ## Self-host with Docker
 
 ```bash
@@ -88,6 +93,8 @@ POST /sign/:token/apply                          → consent + signature + field
 GET  /api/envelopes/:id/documents/:doc/download  → the signed (and sealed) PDF
 GET  /api/envelopes/:id/documents/:doc/verify    → PAdES verification result
 GET  /api/envelopes/:id/certificate              → certificate of completion (audit + hashes)
+GET  /sign/:token/documents/:doc                 → the recipient's own signed copy, after completion
+DELETE /api/envelopes/:id/fields/:fieldId        → remove a misplaced field (draft only)
 POST /api/webhooks                               → register an event callback endpoint
 ```
 
