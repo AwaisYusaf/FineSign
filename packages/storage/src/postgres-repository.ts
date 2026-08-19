@@ -56,6 +56,18 @@ export class PostgresEnvelopeRepository implements EnvelopeRepository {
         recipient_id text NOT NULL
       );
     `);
+    // `expires_at` powers the expiry sweep. Added separately (not in the CREATE
+    // above) so a database created before it existed picks it up too — the
+    // CREATE is a no-op there. Backfilled from the stored aggregate.
+    await this.client.query("ALTER TABLE envelopes ADD COLUMN IF NOT EXISTS expires_at text");
+    await this.client.query(
+      "UPDATE envelopes SET expires_at = data::json->>'expiresAt' WHERE expires_at IS NULL"
+    );
+    // Composite (status, expires_at) rather than a partial index: it is the
+    // textbook shape for `WHERE status = ? AND expires_at < ?`, and it does not
+    // depend on partial-index support, which not every Postgres-compatible
+    // engine implements faithfully.
+    await this.client.query("CREATE INDEX IF NOT EXISTS idx_env_expiry ON envelopes(status, expires_at)");
   }
 
   /** Run `fn` inside a single-connection BEGIN/COMMIT (ROLLBACK on error). */
@@ -98,8 +110,8 @@ export class PostgresEnvelopeRepository implements EnvelopeRepository {
         // Plain INSERT — the primary key gives atomic, race-free conflict
         // detection (no SELECT-then-write TOCTOU). `seq` is DB-assigned.
         await c.query(
-          "INSERT INTO envelopes (id, data, status, created_at, version) VALUES ($1, $2, $3, $4, $5)",
-          [envelope.id, JSON.stringify(envelope), envelope.status, envelope.createdAt, envelope.version]
+          "INSERT INTO envelopes (id, data, status, created_at, version, expires_at) VALUES ($1, $2, $3, $4, $5, $6)",
+          [envelope.id, JSON.stringify(envelope), envelope.status, envelope.createdAt, envelope.version, envelope.expiresAt]
         );
       } catch (err) {
         if (isUniqueViolation(err)) throw new Error(`envelope ${envelope.id} already exists`);
@@ -116,8 +128,8 @@ export class PostgresEnvelopeRepository implements EnvelopeRepository {
       // Atomic compare-and-swap via `WHERE version = expected` (no lock needed):
       // the UPDATE affects a row only if the stored version still matches.
       const upd = await c.query(
-        "UPDATE envelopes SET data = $2, status = $3, version = $4 WHERE id = $1 AND version = $5 RETURNING id",
-        [envelope.id, data, envelope.status, newVersion, envelope.version]
+        "UPDATE envelopes SET data = $2, status = $3, version = $4, expires_at = $6 WHERE id = $1 AND version = $5 RETURNING id",
+        [envelope.id, data, envelope.status, newVersion, envelope.version, envelope.expiresAt]
       );
       if (upd.rows.length === 0) {
         const exists = await c.query("SELECT 1 FROM envelopes WHERE id = $1", [envelope.id]);
@@ -125,8 +137,8 @@ export class PostgresEnvelopeRepository implements EnvelopeRepository {
           throw new ConflictError("VERSION_CONFLICT", `envelope ${envelope.id} was modified concurrently`);
         }
         await c.query(
-          "INSERT INTO envelopes (id, data, status, created_at, version) VALUES ($1, $2, $3, $4, $5)",
-          [envelope.id, data, envelope.status, envelope.createdAt, newVersion]
+          "INSERT INTO envelopes (id, data, status, created_at, version, expires_at) VALUES ($1, $2, $3, $4, $5, $6)",
+          [envelope.id, data, envelope.status, envelope.createdAt, newVersion, envelope.expiresAt]
         );
       }
       await this.refreshTokens(c, envelope);
@@ -162,6 +174,15 @@ export class PostgresEnvelopeRepository implements EnvelopeRepository {
         : "SELECT data FROM envelopes ORDER BY seq ASC OFFSET $1";
     const args = params?.limit != null ? [params.limit, offset] : [offset];
     const { rows } = await this.client.query(text, args);
+    return rows.map((r) => JSON.parse(r.data as string) as Envelope);
+  }
+
+  async listExpirable(nowIso: string, limit: number): Promise<Envelope[]> {
+    await this.ready;
+    const { rows } = await this.client.query(
+      "SELECT data FROM envelopes WHERE status = 'sent' AND expires_at IS NOT NULL AND expires_at < $1 ORDER BY expires_at ASC LIMIT $2",
+      [nowIso, limit]
+    );
     return rows.map((r) => JSON.parse(r.data as string) as Envelope);
   }
 }

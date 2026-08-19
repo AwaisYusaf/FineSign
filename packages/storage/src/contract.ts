@@ -166,6 +166,45 @@ export async function runEnvelopeRepositoryContract(
     assert.deepEqual(page.map((e) => e.id), ["b", "c"]);
   }
 
+  // listExpirable returns only overdue SENT envelopes, oldest deadline first,
+  // capped at the limit — the expiry sweep depends on all four properties.
+  {
+    const repo = makeRepo();
+    const now = "2026-07-10T12:00:00.000Z";
+    const sent = (id: string, expiresAt: string | null) =>
+      sampleEnvelope(id, { status: "sent", sentAt: "2026-07-01T00:00:00.000Z", expiresAt });
+    await repo.create(sent("overdue-late", "2026-07-10T11:00:00.000Z"));
+    await repo.create(sent("overdue-early", "2026-07-09T00:00:00.000Z"));
+    await repo.create(sent("future", "2026-07-11T00:00:00.000Z"));
+    await repo.create(sent("no-deadline", null));
+    await repo.create(sampleEnvelope("still-draft", { expiresAt: "2026-01-01T00:00:00.000Z" }));
+    await repo.create(
+      sampleEnvelope("already-completed", { status: "completed", expiresAt: "2026-01-01T00:00:00.000Z" })
+    );
+
+    const due = await repo.listExpirable(now, 10);
+    assert.deepEqual(
+      due.map((e) => e.id),
+      ["overdue-early", "overdue-late"],
+      "only past-deadline sent envelopes, oldest first"
+    );
+    const capped = await repo.listExpirable(now, 1);
+    assert.deepEqual(capped.map((e) => e.id), ["overdue-early"], "limit must be honored");
+    // The deadline is exclusive: an envelope expiring exactly now is not yet due.
+    assert.deepEqual(await repo.listExpirable("2026-07-09T00:00:00.000Z", 10), []);
+  }
+
+  // A status change must be reflected in listExpirable (the SQL adapters keep a
+  // denormalized column, which has to track the aggregate).
+  {
+    const repo = makeRepo();
+    const env = sampleEnvelope("mutating", { status: "sent", expiresAt: "2026-07-09T00:00:00.000Z" });
+    await repo.create(env);
+    assert.equal((await repo.listExpirable("2026-07-10T00:00:00.000Z", 10)).length, 1);
+    await repo.save({ ...env, status: "completed" });
+    assert.deepEqual(await repo.listExpirable("2026-07-10T00:00:00.000Z", 10), []);
+  }
+
   // Mutating a returned aggregate must not corrupt the store.
   {
     const repo = makeRepo();

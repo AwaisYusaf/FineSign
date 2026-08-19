@@ -57,4 +57,14 @@ export class InMemoryEnvelopeRepository implements EnvelopeRepository {
       .slice(offset, offset + limit)
       .map((id) => clone(this.store.get(id)!));
   }
+
+  async listExpirable(nowIso: string, limit: number): Promise<Envelope[]> {
+    const now = new Date(nowIso).getTime();
+    return this.order
+      .map((id) => this.store.get(id)!)
+      .filter((e) => e.status === "sent" && !!e.expiresAt && new Date(e.expiresAt).getTime() < now)
+      .sort((a, b) => (a.expiresAt! < b.expiresAt! ? -1 : a.expiresAt! > b.expiresAt! ? 1 : 0))
+      .slice(0, limit)
+      .map(clone);
+  }
 }

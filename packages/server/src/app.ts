@@ -141,6 +141,9 @@ export interface SessionView {
   }[];
 }
 
+/** How many overdue envelopes one expiry-sweep batch claims at a time. */
+const SWEEP_BATCH_SIZE = 200;
+
 function certKey(envelopeId: string): string {
   return `env/${envelopeId}/certificate.pdf`;
 }
@@ -309,24 +312,36 @@ export class EnvelopeApp {
    * Expire every `sent` envelope past its `expiresAt`. Returns the count expired.
    * Intended for a periodic sweep; individual accesses also expire lazily via
    * `resolveToken`. Best-effort per envelope — a save conflict is skipped, not fatal.
+   *
+   * Works in bounded batches off an indexed query rather than scanning the table:
+   * this runs on a timer for the life of the process, and the due set is almost
+   * always empty, so loading and deserializing every envelope each tick was
+   * O(table) work for nothing (and an OOM waiting to happen on a large store).
+   * Batches repeat until a pass yields no further progress, so one tick still
+   * drains a backlog.
    */
-  async sweepExpired(): Promise<number> {
-    const now = this.deps.clock.now();
-    const all = await this.deps.repo.list();
+  async sweepExpired(batchSize = SWEEP_BATCH_SIZE): Promise<number> {
     let expired = 0;
-    for (const env of all) {
-      if (env.status !== "sent" || !env.expiresAt) continue;
-      if (now.getTime() <= new Date(env.expiresAt).getTime()) continue;
-      const result = this.svc.expireIfDue(env, now);
-      if (result.envelope.status !== "expired") continue;
-      try {
-        await this.persistThenDeliver(result.envelope, result.effects);
-        expired++;
-      } catch {
-        // Concurrent mutation lost the CAS — leave it for the next sweep/access.
+    for (;;) {
+      const now = this.deps.clock.now();
+      const due = await this.deps.repo.listExpirable(now.toISOString(), batchSize);
+      if (due.length === 0) return expired;
+      let progressed = 0;
+      for (const env of due) {
+        const result = this.svc.expireIfDue(env, now);
+        if (result.envelope.status !== "expired") continue;
+        try {
+          await this.persistThenDeliver(result.envelope, result.effects);
+          expired++;
+          progressed++;
+        } catch {
+          // Concurrent mutation lost the CAS — leave it for the next sweep/access.
+        }
       }
+      // Nothing in this batch could be advanced (all contended, or all skipped),
+      // so another identical query would return the same rows forever.
+      if (progressed === 0) return expired;
     }
-    return expired;
   }
 
   async voidEnvelope(envelopeId: string, reason: string): Promise<Envelope> {

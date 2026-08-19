@@ -23,6 +23,16 @@ export interface EnvelopeRepository {
     tokenHash: string
   ): Promise<{ envelope: Envelope; recipientId: string } | null>;
   list(params?: { limit?: number; offset?: number }): Promise<Envelope[]>;
+  /**
+   * `sent` envelopes whose `expiresAt` is strictly before `nowIso`, oldest first,
+   * capped at `limit`.
+   *
+   * A dedicated query rather than a `list()` filter: the expiry sweep runs on a
+   * timer forever, and scanning + deserializing every envelope in the store on
+   * each tick is O(table) work to find the usually-empty set that is actually
+   * due. Adapters are free to index it (the SQL ones do).
+   */
+  listExpirable(nowIso: string, limit: number): Promise<Envelope[]>;
 }
 
 /** Opaque byte storage addressed by key (local FS, S3, …). */

@@ -524,3 +524,46 @@ test("send: a mailer failure does not fail the request or lose the transition", 
 
   await server.close();
 });
+
+test("DG3: the sweep drains a backlog larger than one batch", async () => {
+  // The sweep now claims bounded batches off an indexed query instead of
+  // scanning the table, so it must keep going until the due set is empty.
+  const mailer = new CapturingMailer();
+  const logger = new NullLogger();
+  const clock = new FixedClock("2026-07-10T00:00:00.000Z");
+  const { app } = buildInMemoryContainer({
+    clock,
+    ids: new SeededIdGenerator("sweep"),
+    mailer,
+    logger,
+    config: { baseUrl: "https://finesign.test" },
+  });
+  const server = await createHttpServer(app, {
+    logger,
+    senderApiKey: API_KEY,
+    publicRateLimitPerMin: 100000,
+    globalRateLimitPerMin: 100000,
+  });
+
+  const pdf = Buffer.from(await makePdf(1)).toString("base64");
+  for (let i = 0; i < 5; i++) {
+    let res = await mgmt(server, "POST", "/api/envelopes", { title: `E${i}`, senderName: "Ops", senderEmail: "ops@co.test", routingType: "sequential" });
+    const envId = j(res).id;
+    res = await mgmt(server, "POST", `/api/envelopes/${envId}/documents`, { name: "d.pdf", format: "pdf", contentBase64: pdf });
+    const docId = j(res).documents[0].id;
+    res = await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "A", email: `a${i}@x.test`, role: "signer", routingOrder: 1 });
+    const rid = j(res).recipients[0].id;
+    await mgmt(server, "POST", `/api/envelopes/${envId}/fields`, { documentId: docId, recipientId: rid, page: 1, x: 0.1, y: 0.8, width: 0.3, height: 0.05, kind: "signature" });
+    await mgmt(server, "POST", `/api/envelopes/${envId}/send`, { expiresInDays: 1 });
+  }
+
+  clock.set("2026-07-12T00:00:00.000Z");
+  // A batch size below the backlog forces the loop to iterate.
+  assert.equal(await app.sweepExpired(2), 5);
+  assert.equal(await app.sweepExpired(2), 0, "a second sweep finds nothing");
+
+  const listed = j(await mgmt(server, "GET", "/api/envelopes")) as { status: string }[];
+  assert.ok(listed.every((e) => e.status === "expired"), "every envelope should be expired");
+
+  await server.close();
+});

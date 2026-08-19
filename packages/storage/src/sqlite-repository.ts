@@ -36,6 +36,25 @@ export class SqliteEnvelopeRepository implements EnvelopeRepository {
       -- deployments never collide; this guards the multi-process case.
       CREATE UNIQUE INDEX IF NOT EXISTS idx_env_seq ON envelopes(seq);
     `);
+    this.migrateExpiresAt();
+  }
+
+  /**
+   * Add the `expires_at` column + sweep index to a database created before it
+   * existed. `CREATE TABLE IF NOT EXISTS` above is a no-op on an existing file,
+   * so the column has to be added explicitly; SQLite has no
+   * `ADD COLUMN IF NOT EXISTS`, hence the `table_info` probe. Backfills from the
+   * stored JSON so pre-existing envelopes are sweepable immediately.
+   */
+  private migrateExpiresAt(): void {
+    const columns = this.db.prepare("PRAGMA table_info(envelopes)").all() as { name: string }[];
+    if (!columns.some((c) => c.name === "expires_at")) {
+      this.db.exec("ALTER TABLE envelopes ADD COLUMN expires_at TEXT");
+      this.db.exec("UPDATE envelopes SET expires_at = json_extract(data, '$.expiresAt')");
+    }
+    // Composite (status, expires_at) — the shape the sweep query filters and
+    // orders by. Kept in step with the Postgres adapter so both behave alike.
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_env_expiry ON envelopes(status, expires_at)");
   }
 
   /** Row insertion order for stable `list()` — monotonically increasing. */
@@ -50,8 +69,10 @@ export class SqliteEnvelopeRepository implements EnvelopeRepository {
     const data = JSON.stringify({ ...envelope, version });
     const tx = this.db.transaction(() => {
       this.db
-        .prepare("INSERT OR REPLACE INTO envelopes (id, data, status, created_at, seq, version) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(envelope.id, data, envelope.status, envelope.createdAt, seq, version);
+        .prepare(
+          "INSERT OR REPLACE INTO envelopes (id, data, status, created_at, seq, version, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        .run(envelope.id, data, envelope.status, envelope.createdAt, seq, version, envelope.expiresAt);
       this.db.prepare("DELETE FROM recipient_tokens WHERE envelope_id = ?").run(envelope.id);
       const ins = this.db.prepare(
         "INSERT OR REPLACE INTO recipient_tokens (token_hash, envelope_id, recipient_id) VALUES (?, ?, ?)"
@@ -109,6 +130,15 @@ export class SqliteEnvelopeRepository implements EnvelopeRepository {
     const rows = this.db
       .prepare("SELECT data FROM envelopes ORDER BY seq ASC LIMIT ? OFFSET ?")
       .all(limit, offset) as { data: string }[];
+    return rows.map((r) => JSON.parse(r.data) as Envelope);
+  }
+
+  async listExpirable(nowIso: string, limit: number): Promise<Envelope[]> {
+    const rows = this.db
+      .prepare(
+        "SELECT data FROM envelopes WHERE status = 'sent' AND expires_at IS NOT NULL AND expires_at < ? ORDER BY expires_at ASC LIMIT ?"
+      )
+      .all(nowIso, limit) as { data: string }[];
     return rows.map((r) => JSON.parse(r.data) as Envelope);
   }
 
