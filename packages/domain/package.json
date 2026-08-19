@@ -1,0 +1,22 @@
+{
+  "name": "@finesign/domain",
+  "version": "0.1.0",
+  "description": "FineSign pure agreement domain: entities, status state machine, routing, hash-chained audit, and port interfaces. No I/O.",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "node --test --import tsx ./test/*.test.ts"
+  },
+  "dependencies": {
+    "@finesign/shared": "0.1.0",
+    "finesign-core": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

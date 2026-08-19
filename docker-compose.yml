@@ -1,0 +1,34 @@
+# One-command self-host. Set FINESIGN_SENDER_API_KEY (and, recommended,
+# FINESIGN_ENCRYPTION_KEY) in a local .env, then: docker compose up --build
+# The web UI is published on :8080 and reverse-proxies the API; the server is not
+# exposed directly (only reachable via the web proxy).
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      FINESIGN_DATA_DIR: /data
+      # Signer links must point at the PUBLIC web origin; /s is the SPA signer route.
+      FINESIGN_BASE_URL: ${FINESIGN_BASE_URL:-http://localhost:8080}
+      FINESIGN_SIGN_PATH: ${FINESIGN_SIGN_PATH:-/s}
+      # The server is only reachable via the nginx proxy, so trusting it is safe here.
+      FINESIGN_TRUST_PROXY: ${FINESIGN_TRUST_PROXY:-true}
+    volumes:
+      - finesign-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    depends_on:
+      - server
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  finesign-data:

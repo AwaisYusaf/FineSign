@@ -1,0 +1,30 @@
+{
+  "name": "@finesign/pades",
+  "version": "0.1.0",
+  "description": "FineSign PAdES/PKI cryptographic signatures — embed & verify ETSI-compliant CMS signatures in PDFs (B-B, B-T).",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "node --test --import tsx ./test/*.test.ts"
+  },
+  "dependencies": {
+    "@finesign/shared": "0.1.0",
+    "@signpdf/placeholder-pdf-lib": "^3.3.0",
+    "@signpdf/signpdf": "^3.3.0",
+    "@signpdf/utils": "^3.3.0",
+    "asn1js": "^3.0.10",
+    "node-forge": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "pkijs": "^3.4.0",
+    "pvutils": "^1.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "@types/node-forge": "^1.3.14",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

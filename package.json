@@ -1,0 +1,37 @@
+{
+  "name": "finesign-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "FineSign — open-source e-signature & agreement platform, built on finesign-core.",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/core",
+    "packages/shared",
+    "packages/domain",
+    "packages/convert",
+    "packages/storage",
+    "packages/pades",
+    "packages/server",
+    "packages/web"
+  ],
+  "scripts": {
+    "gate": "bash scripts/gate.sh",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint packages --max-warnings 0",
+    "boundaries": "bash scripts/check-boundaries.sh",
+    "licenses": "node scripts/license-report.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.9.1",
+    "eslint": "^9.39.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.63.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

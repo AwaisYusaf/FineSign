@@ -1,0 +1,18 @@
+{
+  "name": "@finesign/shared",
+  "version": "0.1.0",
+  "description": "Cross-cutting primitives for FineSign: typed errors, Clock, id/token generation, logger.",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "node --test --import tsx ./test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

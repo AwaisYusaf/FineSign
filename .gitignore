@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+packages/*/dist/
+packages/web/dist/
+*.tsbuildinfo
+
+# Runtime data (SQLite, blobs)
+.finesign-data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+
+# Logs / coverage / OS
+*.log
+coverage/
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp

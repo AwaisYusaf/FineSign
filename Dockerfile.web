@@ -1,0 +1,14 @@
+# FineSign web UI. Built with VITE_API_BASE="" so the browser talks to the same
+# origin; nginx serves the SPA and reverse-proxies the API paths to the server,
+# so there is no cross-origin (CORS) surface.
+FROM node:20-bookworm-slim AS build
+WORKDIR /app
+COPY . .
+ENV VITE_API_BASE=""
+RUN npm install --legacy-peer-deps \
+ && npm run build --workspace @finesign/web
+
+FROM nginx:1.27-alpine
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/packages/web/dist /usr/share/nginx/html
+EXPOSE 80

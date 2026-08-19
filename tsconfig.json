@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/shared" },
+    { "path": "packages/domain" },
+    { "path": "packages/convert" },
+    { "path": "packages/storage" },
+    { "path": "packages/pades" },
+    { "path": "packages/server" }
+  ]
+}

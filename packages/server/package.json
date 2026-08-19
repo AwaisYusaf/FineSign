@@ -1,0 +1,35 @@
+{
+  "name": "@finesign/server",
+  "version": "0.1.0",
+  "description": "FineSign REST API — the composition root wiring domain + adapters + finesign-core into an e-signature service.",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "node --test --import tsx ./test/*.test.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/swagger": "^9.8.0",
+    "@fastify/swagger-ui": "^5.2.6",
+    "@finesign/convert": "0.1.0",
+    "@finesign/domain": "0.1.0",
+    "@finesign/pades": "0.1.0",
+    "@finesign/shared": "0.1.0",
+    "@finesign/storage": "0.1.0",
+    "fastify": "^5.2.0",
+    "finesign-core": "0.1.0",
+    "nodemailer": "^9.0.3",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.0.0",
+    "@types/node": "^24.9.1",
+    "@types/nodemailer": "^6.4.24",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
