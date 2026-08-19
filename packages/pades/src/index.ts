@@ -27,6 +27,7 @@ export { augmentToBLta, type DocTimeStampOptions } from "./doctimestamp";
 export {
   createInProcessValidationDataProvider,
   createHttpValidationDataProvider,
+  revocationSourcesForCert,
   issueCrl,
   issueOcsp,
   type ValidationData,

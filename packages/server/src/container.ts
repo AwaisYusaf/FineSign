@@ -28,6 +28,8 @@ import {
   createHttpTsa,
   createInProcessTsa,
   createInProcessValidationDataProvider,
+  createHttpValidationDataProvider,
+  revocationSourcesForCert,
   type TimestampAuthority,
   type PadesLevel,
 } from "@finesign/pades";
@@ -167,15 +169,6 @@ function buildTsaFromEnv(logger: Logger): { tsa?: TimestampAuthority; tsaTrustSt
   return {};
 }
 
-/**
- * Build the PAdES sealer from the environment (production):
- *   - `FINESIGN_SEAL_P12` + `FINESIGN_SEAL_PASSPHRASE` → load an org signing cert.
- *   - else `FINESIGN_DEV_SEAL=true` → a self-signed DEV seal (not for real use).
- *   - else → no sealing.
- * A configured TSA (see `buildTsaFromEnv`) upgrades the seal to PAdES-B-T.
- * `FINESIGN_SEAL_REQUIRED=true` makes a missing credential a hard boot failure
- * (fail-closed: never deliver a "completed" doc unsealed when sealing is required).
- */
 /** Validate the requested PAdES level env, failing fast on a typo/unknown value. */
 function parsePadesLevelEnv(): PadesLevel | undefined {
   const raw = process.env.FINESIGN_PADES_LEVEL;
@@ -187,33 +180,107 @@ function parsePadesLevelEnv(): PadesLevel | undefined {
   return raw as PadesLevel;
 }
 
+/**
+ * Refuse to boot with a seal level the wiring cannot actually produce.
+ * `sealPdf` enforces the same rule, but it only runs at COMPLETION — inside
+ * `finalize()`, during the last signer's apply. Failing there rejects that
+ * signature and leaves an envelope that can never complete, so the check has to
+ * happen while the operator is still looking at the logs.
+ */
+function assertSealableLevel(level: PadesLevel, have: { tsa: boolean; revocation: boolean }): void {
+  if (level !== "B-B" && !have.tsa) {
+    throw new Error(
+      `FINESIGN_PADES_LEVEL="${level}" requires a timestamp authority — set FINESIGN_TSA_URL (or FINESIGN_DEV_TSA=true for local testing)`
+    );
+  }
+  if ((level === "B-LT" || level === "B-LTA") && !have.revocation) {
+    throw new Error(
+      `FINESIGN_PADES_LEVEL="${level}" requires revocation material, but the seal certificate publishes neither a CRL distribution point nor an OCSP responder — use a CA-issued certificate, or set FINESIGN_SEAL_CRL_URL / FINESIGN_SEAL_OCSP_URL`
+    );
+  }
+}
+
+/**
+ * Verification trust anchors from `FINESIGN_SEAL_TRUST_CERTS` (comma-separated
+ * PEM/DER paths). A CA-issued seal certificate should be verified against its
+ * issuing CA, not against itself; without this the sealer falls back to direct
+ * trust in the leaf, which still verifies but proves less. Returns undefined
+ * when unset so that fallback stays the default.
+ */
+function readTrustAnchorsFromEnv(): Uint8Array[] | undefined {
+  const raw = process.env.FINESIGN_SEAL_TRUST_CERTS;
+  if (!raw) return undefined;
+  const paths = raw.split(",").map((v) => v.trim()).filter((v) => v.length > 0);
+  if (paths.length === 0) return undefined;
+  return paths.map((path) => readCertDer(path));
+}
+
+/**
+ * Build the PAdES sealer from the environment (production):
+ *   - `FINESIGN_SEAL_P12` + `FINESIGN_SEAL_PASSPHRASE` → load an org signing cert.
+ *   - else `FINESIGN_DEV_SEAL=true` → a self-signed DEV seal (not for real use).
+ *   - else → no sealing.
+ *
+ * The level comes from `FINESIGN_PADES_LEVEL`, defaulting to the strongest the
+ * wiring supports (B-T with a TSA configured, else B-B). B-T and above need a
+ * TSA (`buildTsaFromEnv`); B-LT/B-LTA additionally need revocation material,
+ * fetched over HTTP from the seal certificate's own CRL distribution point / AIA
+ * OCSP responder. Every requirement is checked HERE, at boot — see
+ * `assertSealableLevel` for why that matters.
+ *
+ * `FINESIGN_SEAL_REQUIRED=true` makes a missing credential a hard boot failure
+ * (fail-closed: never deliver a "completed" doc unsealed when sealing is required).
+ */
 function buildSealerFromEnv(logger: Logger): DocumentSealer | undefined {
   const p12Path = process.env.FINESIGN_SEAL_P12;
   const required = process.env.FINESIGN_SEAL_REQUIRED === "true";
   const requestedLevel = parsePadesLevelEnv();
   if (p12Path) {
-    // Production B-LT/LTA needs an HTTP validation-data provider (CRL/OCSP fetch),
-    // which is deferred — fail fast rather than silently downgrading the seal.
-    if (requestedLevel === "B-LT" || requestedLevel === "B-LTA") {
-      throw new Error(
-        `FINESIGN_PADES_LEVEL="${requestedLevel}" with a PKCS#12 seal is not yet supported (needs an HTTP validation-data provider); use B-T, or FINESIGN_DEV_SEAL for offline B-LT/LTA`
-      );
-    }
     const bytes = new Uint8Array(fs.readFileSync(p12Path));
     const credential = LocalSigningCredential.fromPkcs12(bytes, process.env.FINESIGN_SEAL_PASSPHRASE ?? "");
     const { tsa, tsaTrustStore } = buildTsaFromEnv(logger);
-    logger.info({ signer: credential.subjectCommonName(), level: requestedLevel ?? (tsa ? "B-T" : "B-B") }, "PAdES sealing enabled (PKCS#12)");
+    // B-LT/B-LTA additionally need revocation material. In production that comes
+    // over HTTP from the leaf's own CRL Distribution Point / AIA OCSP responder,
+    // overridable when the certificate carries no usable URL.
+    const longTerm = requestedLevel === "B-LT" || requestedLevel === "B-LTA";
+    const crlUrl = process.env.FINESIGN_SEAL_CRL_URL;
+    const ocspUrl = process.env.FINESIGN_SEAL_OCSP_URL;
+    const provider = longTerm
+      ? createHttpValidationDataProvider({
+          ...(crlUrl ? { crlUrl } : {}),
+          ...(ocspUrl ? { ocspUrl } : {}),
+        })
+      : undefined;
+    // The provider is best-effort: it returns empty material rather than failing,
+    // so its mere existence proves nothing. Ask the certificate itself whether
+    // there is anything to fetch, or take the operator's explicit override.
+    const published = longTerm ? revocationSourcesForCert(credential.certificate()) : null;
+    const haveRevocation = !!crlUrl || !!ocspUrl || !!published?.crlUrl || !!published?.ocspUrl;
+    const level = requestedLevel ?? (tsa ? "B-T" : "B-B");
+    // Fail at BOOT, not at the last signer's apply: `sealPdf` rejects a level it
+    // lacks the inputs for, and that throw would otherwise land inside
+    // `finalize()` — rejecting the final signature and wedging the envelope,
+    // which can never complete afterwards.
+    assertSealableLevel(level, { tsa: !!tsa, revocation: haveRevocation });
+    const trustStore = readTrustAnchorsFromEnv();
+    logger.info(
+      { signer: credential.subjectCommonName(), level, trustAnchors: trustStore?.length ?? 0 },
+      "PAdES sealing enabled (PKCS#12)"
+    );
     return new PadesDocumentSealer(credential, {
+      level,
       timestampAuthority: tsa,
       tsaTrustStore,
-      ...(requestedLevel ? { level: requestedLevel } : {}),
+      ...(provider ? { validationDataProvider: provider } : {}),
+      ...(trustStore ? { trustStore } : {}),
     });
   }
   if (process.env.FINESIGN_DEV_SEAL === "true") {
     const target = requestedLevel ?? "B-T";
     // Dev B-LT/B-LTA: a self-contained CA→leaf + in-process TSA + validation
-    // provider, so long-term levels work offline. (Production B-LT/LTA needs a
-    // real CA-issued cert + an HTTP validation provider — deferred.)
+    // provider, so long-term levels work offline with no external CA or TSA.
+    // (Production uses FINESIGN_SEAL_P12 + FINESIGN_TSA_URL and fetches the
+    // revocation material over HTTP — see the PKCS#12 branch above.)
     if (target === "B-LT" || target === "B-LTA") {
       const ca = generateTestCa({ commonName: "FineSign Dev Root CA", organization: "FineSign" });
       const leaf = ca.issueLeaf({ commonName: "FineSign Dev Seal", organization: "FineSign" });
@@ -231,8 +298,11 @@ function buildSealerFromEnv(logger: Logger): DocumentSealer | undefined {
     }
     const { credential } = generateSelfSignedCredential({ commonName: "FineSign Dev Seal", organization: "FineSign" });
     const { tsa, tsaTrustStore } = buildTsaFromEnv(logger);
-    logger.warn({ timestamped: !!tsa }, "PAdES sealing enabled with a SELF-SIGNED DEV certificate — not for production");
-    return new PadesDocumentSealer(credential, { timestampAuthority: tsa, tsaTrustStore });
+    // Forward the requested level explicitly — omitting it let the sealer pick its
+    // own default and silently ignore FINESIGN_PADES_LEVEL here.
+    assertSealableLevel(target, { tsa: !!tsa, revocation: false });
+    logger.warn({ level: target, timestamped: !!tsa }, "PAdES sealing enabled with a SELF-SIGNED DEV certificate — not for production");
+    return new PadesDocumentSealer(credential, { level: target, timestampAuthority: tsa, tsaTrustStore });
   }
   if (required) {
     throw new Error("FINESIGN_SEAL_REQUIRED=true but no FINESIGN_SEAL_P12 configured");

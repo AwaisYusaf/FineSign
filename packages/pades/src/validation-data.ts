@@ -213,6 +213,23 @@ function ocspUrlFromCert(cert: Certificate): string | null {
 }
 
 /**
+ * The revocation endpoints a certificate publishes: its CRL Distribution Point
+ * and its AIA OCSP responder, either of which may be absent (a self-signed cert
+ * publishes neither).
+ *
+ * Exposed so a caller can check UP FRONT whether a certificate can support a
+ * long-term (B-LT/B-LTA) seal at all — `createHttpValidationDataProvider` is
+ * best-effort by design and returns empty material rather than failing, which
+ * would otherwise turn "this cert can never do B-LT" into a silently degraded
+ * seal discovered much later.
+ */
+export function revocationSourcesForCert(certDer: Uint8Array): { crlUrl: string | null; ocspUrl: string | null } {
+  ensureEngine();
+  const cert = Certificate.fromBER(certDer);
+  return { crlUrl: crlUrlFromCert(cert), ocspUrl: ocspUrlFromCert(cert) };
+}
+
+/**
  * A production validation-data provider that fetches the CRL from the leaf's CRL
  * Distribution Point (or an explicit `crlUrl`) and an OCSP response from its AIA
  * responder (or an explicit `ocspUrl`). Mirrors `createHttpTsa`: an injectable
