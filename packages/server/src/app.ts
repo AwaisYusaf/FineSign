@@ -624,9 +624,39 @@ export class EnvelopeApp {
     // external effects (mail). Both are post-save and best-effort.
     await this.enqueueWebhooks(cur);
     for (const effect of external) {
-      if (effect.type === "notify") await this.notify(cur, effect);
+      if (effect.type === "notify") await this.notifyBestEffort(cur, effect);
     }
     return cur;
+  }
+
+  /**
+   * Send one notification, absorbing a delivery failure.
+   *
+   * The aggregate is already durably saved by the time we get here: the envelope
+   * IS sent, the tokens ARE issued, the transition HAS happened. Letting a
+   * transient SMTP error escape would report that committed work as a 500 and
+   * abandon every remaining notification — the sender would see failure, retry,
+   * and get a conflict from an envelope that had in fact moved on.
+   *
+   * So a failure is logged loudly and the operator recovers with resend/remind.
+   * Until the notification outbox lands (backlog R.2) this is the honest
+   * boundary: state is durable, delivery is best-effort, and the gap is visible.
+   */
+  private async notifyBestEffort(env: Envelope, effect: NotifyEffect): Promise<void> {
+    try {
+      await this.notify(env, effect);
+    } catch (e) {
+      this.deps.logger.error(
+        {
+          envelopeId: env.id,
+          recipientId: effect.recipientId ?? null,
+          toSender: effect.toSender ?? false,
+          reason: effect.reason,
+          err: e instanceof Error ? e.message : String(e),
+        },
+        "notification delivery FAILED — envelope state is saved; re-send the signing link to recover"
+      );
+    }
   }
 
   /**

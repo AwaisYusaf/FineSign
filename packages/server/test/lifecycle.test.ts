@@ -467,3 +467,60 @@ test("apply: a malformed signature image is a 400, and the envelope stays signab
 
   await server.close();
 });
+
+// ── Notification delivery is best-effort AFTER the state is durable ───────────
+// Regression: `persistThenDeliver` saves the aggregate and then sends mail. A
+// transient SMTP failure escaped as a 500 for work that had already committed —
+// the envelope was sent and the tokens issued, but the sender saw failure and a
+// retry would 409. State is durable; delivery is best-effort and logged.
+
+test("send: a mailer failure does not fail the request or lose the transition", async () => {
+  const mailer = new CapturingMailer();
+  const logger = new NullLogger();
+  const failing = {
+    async send(message: Parameters<typeof mailer.send>[0]) {
+      if (message.to === "alice@x.test") throw new Error("smtp connect ECONNREFUSED");
+      await mailer.send(message);
+    },
+  };
+  const { app } = buildInMemoryContainer({
+    clock: new FixedClock("2026-07-10T00:00:00.000Z"),
+    ids: new SeededIdGenerator("mailfail"),
+    mailer: failing,
+    logger,
+    config: { baseUrl: "https://finesign.test" },
+  });
+  const server = await createHttpServer(app, {
+    logger,
+    senderApiKey: API_KEY,
+    publicRateLimitPerMin: 100000,
+    globalRateLimitPerMin: 100000,
+  });
+
+  let res = await mgmt(server, "POST", "/api/envelopes", { title: "T", senderName: "Ops", senderEmail: "ops@co.test", routingType: "parallel" });
+  const envId = j(res).id;
+  const pdf = await makePdf(1);
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/documents`, { name: "d.pdf", format: "pdf", contentBase64: Buffer.from(pdf).toString("base64") });
+  const docId = j(res).documents[0].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Alice", email: "alice@x.test", role: "signer", routingOrder: 1 });
+  const alice = j(res).recipients[0].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Bob", email: "bob@x.test", role: "signer", routingOrder: 1 });
+  const bob = j(res).recipients[1].id;
+  for (const r of [alice, bob]) {
+    await mgmt(server, "POST", `/api/envelopes/${envId}/fields`, { documentId: docId, recipientId: r, page: 1, x: 0.1, y: 0.8, width: 0.3, height: 0.05, kind: "signature" });
+  }
+
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/send`);
+  assert.equal(res.statusCode, 200, res.payload);
+  assert.equal(j(res).status, "sent");
+
+  // Alice's delivery blew up; Bob's must still have gone out, and both are
+  // recorded as notified so the sender can recover with resend.
+  assert.equal(mailer.to("bob@x.test").length, 1);
+  assert.equal(mailer.to("alice@x.test").length, 0);
+  const stored = j(await mgmt(server, "GET", `/api/envelopes/${envId}`));
+  assert.equal(stored.recipients.find((r: { id: string }) => r.id === alice).status, "notified");
+  assert.equal(stored.recipients.find((r: { id: string }) => r.id === bob).status, "notified");
+
+  await server.close();
+});
