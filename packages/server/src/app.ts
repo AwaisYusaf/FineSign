@@ -509,14 +509,17 @@ export class EnvelopeApp {
    *
    * Deliberately not "all of them": during signing a recipient sees only the
    * documents carrying their own fields, and completion is not a reason to widen
-   * that. A `cc` recipient is the exception — they have no fields by definition,
-   * and receiving the finished package is their entire role — so they get the
-   * whole set, which is what they were always going to be sent.
+   * that.
+   *
+   * The exception is a recipient with NO fields, who was never scoped to a
+   * subset in the first place and would otherwise be handed an empty package.
+   * That is every `cc` — receiving the finished agreement is their entire role —
+   * and also an approver with nothing to fill in, which `validateForSend`
+   * permits (it requires fields of *signers* only).
    */
   private completedDocumentsFor(env: Envelope, recipientId: string): Envelope["documents"] {
-    const rec = env.recipients.find((r) => r.id === recipientId);
-    if (rec?.role === "cc") return env.documents;
     const mine = new Set(env.fields.filter((f) => f.recipientId === recipientId).map((f) => f.documentId));
+    if (mine.size === 0) return env.documents;
     return env.documents.filter((d) => mine.has(d.id));
   }
 

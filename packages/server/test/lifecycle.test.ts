@@ -713,3 +713,44 @@ test("fields: a misplaced field can be removed from a draft, but not after send"
 
   await server.close();
 });
+
+test("completion: an approver with no fields still receives the package", async () => {
+  // `validateForSend` requires fields of SIGNERS only, so an approver can have
+  // none — and then has no "their own documents" to scope to. Keying the
+  // completed-package exception on the cc ROLE (rather than on having no fields)
+  // handed such an approver an empty list after they had signed.
+  const { server, mailer } = await setup();
+
+  let res = await mgmt(server, "POST", "/api/envelopes", { title: "T", senderName: "Ops", senderEmail: "ops@co.test", routingType: "parallel" });
+  const envId = j(res).id;
+  const pdf = await makePdf(1);
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/documents`, { name: "d.pdf", format: "pdf", contentBase64: Buffer.from(pdf).toString("base64") });
+  const docId = j(res).documents[0].id;
+  res = await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Alice", email: "alice@x.test", role: "signer", routingOrder: 1 });
+  const alice = j(res).recipients[0].id;
+  await mgmt(server, "POST", `/api/envelopes/${envId}/recipients`, { name: "Ann", email: "ann@x.test", role: "approver", routingOrder: 1 });
+  await mgmt(server, "POST", `/api/envelopes/${envId}/fields`, { documentId: docId, recipientId: alice, page: 1, x: 0.1, y: 0.8, width: 0.3, height: 0.05, kind: "signature" });
+  await mgmt(server, "POST", `/api/envelopes/${envId}/send`);
+
+  const sign = async (email: string) => {
+    const token = tokenFromLink(mailer.to(email)[0].link);
+    return server.inject({
+      method: "POST",
+      url: `/sign/${token}/apply`,
+      payload: { signature: { kind: "typed", name: email, font: "great_vibes" }, consent: true },
+    });
+  };
+  await sign("alice@x.test");
+  const done = await sign("ann@x.test");
+  assert.equal(j(done).status, "completed", done.payload);
+
+  const link = mailer.to("ann@x.test").find((m) => m.subject.startsWith("Completed"))!.link;
+  const session = await server.inject({ method: "GET", url: `/sign/${tokenFromLink(link)}` });
+  assert.equal(session.statusCode, 200, session.payload);
+  assert.deepEqual(j(session).documents.map((d: { id: string }) => d.id), [docId]);
+
+  const doc = await server.inject({ method: "GET", url: `/sign/${tokenFromLink(link)}/documents/${docId}` });
+  assert.equal(doc.statusCode, 200);
+
+  await server.close();
+});
