@@ -27,7 +27,11 @@ export class ConsoleLogger implements Logger {
     this.write("error", obj, msg);
   }
   private write(level: string, obj: Record<string, unknown>, msg?: string): void {
-    const line = JSON.stringify({ level, msg, ...obj });
+    // `level` and `msg` are spread LAST so a context key can never overwrite
+    // them. Spreading context last let a caller passing e.g. `{ level: "B-T" }`
+    // silently replace the severity, so the record no longer said "warn" and an
+    // ops filter on `level` would miss it entirely.
+    const line = JSON.stringify({ ...obj, level, msg });
     // Single controlled sink — allowed here, this IS the logger implementation.
     (level === "error" ? console.error : console.log)(line);
   }

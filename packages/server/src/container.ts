@@ -264,7 +264,7 @@ function buildSealerFromEnv(logger: Logger): DocumentSealer | undefined {
     assertSealableLevel(level, { tsa: !!tsa, revocation: haveRevocation });
     const trustStore = readTrustAnchorsFromEnv();
     logger.info(
-      { signer: credential.subjectCommonName(), level, trustAnchors: trustStore?.length ?? 0 },
+      { signer: credential.subjectCommonName(), padesLevel: level, trustAnchors: trustStore?.length ?? 0 },
       "PAdES sealing enabled (PKCS#12)"
     );
     return new PadesDocumentSealer(credential, {
@@ -287,7 +287,7 @@ function buildSealerFromEnv(logger: Logger): DocumentSealer | undefined {
       const { credential: tsaCredential } = generateSelfSignedTsaCredential({ commonName: "FineSign Dev TSA", organization: "FineSign" });
       const tsa = createInProcessTsa({ credential: tsaCredential, clock: new SystemClock() });
       const provider = createInProcessValidationDataProvider({ ca, clock: new SystemClock() });
-      logger.warn({ level: target }, "PAdES long-term sealing enabled with a DEV CA + in-process TSA/validation — not for production");
+      logger.warn({ padesLevel: target }, "PAdES long-term sealing enabled with a DEV CA + in-process TSA/validation — not for production");
       return new PadesDocumentSealer(leaf.credential, {
         level: target,
         timestampAuthority: tsa,
@@ -301,7 +301,7 @@ function buildSealerFromEnv(logger: Logger): DocumentSealer | undefined {
     // Forward the requested level explicitly — omitting it let the sealer pick its
     // own default and silently ignore FINESIGN_PADES_LEVEL here.
     assertSealableLevel(target, { tsa: !!tsa, revocation: false });
-    logger.warn({ level: target, timestamped: !!tsa }, "PAdES sealing enabled with a SELF-SIGNED DEV certificate — not for production");
+    logger.warn({ padesLevel: target, timestamped: !!tsa }, "PAdES sealing enabled with a SELF-SIGNED DEV certificate — not for production");
     return new PadesDocumentSealer(credential, { level: target, timestampAuthority: tsa, tsaTrustStore });
   }
   if (required) {

@@ -9,6 +9,7 @@ import {
   ValidationError,
   NotFoundError,
   isFineSignError,
+  ConsoleLogger,
 } from "../src/index";
 
 test("FixedClock is deterministic and advances only when told", () => {
@@ -66,4 +67,22 @@ test("errors carry stable codes + http status and are guardable", () => {
   assert.ok(isFineSignError(v));
   assert.ok(isFineSignError(new NotFoundError("nope")));
   assert.ok(!isFineSignError(new Error("plain")));
+});
+
+test("ConsoleLogger: a context key cannot overwrite the severity or message", () => {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (line: string) => void lines.push(line);
+  try {
+    // `level` is exactly what a caller wants to log about a PAdES seal, and it
+    // used to silently replace the severity — so the record read as
+    // {"level":"B-T"} and an ops filter on level=warn would never see it.
+    new ConsoleLogger().warn({ level: "B-T", msg: "spoofed", padesLevel: "B-T" }, "real message");
+  } finally {
+    console.log = original;
+  }
+  const record = JSON.parse(lines[0]) as Record<string, unknown>;
+  assert.equal(record.level, "warn");
+  assert.equal(record.msg, "real message");
+  assert.equal(record.padesLevel, "B-T");
 });
