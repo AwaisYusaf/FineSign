@@ -1,16 +1,33 @@
 /**
  * Script-font registry for typed-name signatures.
  *
- * Signet bundles four handwriting fonts (in `assets/fonts/`, all OFL-licensed).
+ * finesign-core bundles four handwriting fonts (in `assets/fonts/`, all OFL-licensed).
  * The registry lazy-loads their bytes from disk and caches them. You can point
  * at a different fonts directory, or register raw font bytes for a custom font
- * key, via `FontRegistry` — handy if you bundle Signet somewhere the relative
+ * key, via `FontRegistry` — handy if you bundle the engine somewhere the relative
  * asset path doesn't resolve, or want your own signature typefaces.
  */
 
 import fs from "fs";
 import path from "path";
-import type { SignatureFont } from "../types";
+import { SIGNATURE_FONTS, type SignatureFont } from "../types";
+
+/**
+ * A typed-name signature asked for a font that is neither built in nor
+ * registered. Typed (not a bare `Error`) so a caller can map it to a 4xx —
+ * the font key comes from the caller, not from us.
+ */
+export class UnknownSignatureFontError extends Error {
+  constructor(
+    readonly fontKey: string,
+    readonly known: readonly string[]
+  ) {
+    super(
+      `Unknown signature font "${fontKey}". Register it with FontRegistry.register() or use one of: ${known.join(", ")}`
+    );
+    this.name = "UnknownSignatureFontError";
+  }
+}
 
 /** Default bundled fonts live at `<package>/assets/fonts`. From the compiled
  *  `dist/engine/` this resolves up to the package root either way. */
@@ -52,11 +69,7 @@ export class FontRegistry {
 
     const file = DEFAULT_FONT_FILES[fontKey as SignatureFont];
     if (!file) {
-      throw new Error(
-        `Unknown signature font "${fontKey}". Register it with FontRegistry.register() or use one of: ${Object.keys(
-          DEFAULT_FONT_FILES
-        ).join(", ")}`
-      );
+      throw new UnknownSignatureFontError(fontKey, [...SIGNATURE_FONTS, ...this.overrides.keys()]);
     }
     const bytes = fs.readFileSync(path.join(this.fontsDir, file));
     this.cache.set(fontKey, bytes);

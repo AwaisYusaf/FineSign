@@ -12,10 +12,13 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import {
   SignEngine,
   getPdfInfo,
+  SignatureImageError,
+  UnknownSignatureFontError,
   type SignatureAnchor,
   type SignaturePlacement,
   type PdfInfo,
 } from "finesign-core";
+import { ValidationError } from "@finesign/shared";
 import type { Field, SignatureInput } from "@finesign/domain";
 
 /** 1×1 transparent PNG — used for the date-only pass (no signature drawn). */
@@ -150,6 +153,26 @@ async function stampTextAndCheckboxes(pdfBytes: Uint8Array, fields: Field[]): Pr
  * `fields` must already be filtered to this recipient + document.
  */
 export async function stampForRecipient(
+  engine: SignEngine,
+  pdfBytes: Uint8Array,
+  fields: Field[],
+  signature: SignatureInput
+): Promise<{ bytes: Uint8Array; summary: StampSummary }> {
+  try {
+    return await stampUnchecked(engine, pdfBytes, fields, signature);
+  } catch (e) {
+    // The engine is a standalone package and cannot depend on our error types, so
+    // it reports bad SIGNER input with its own typed errors. Translate them to a
+    // 400 here — the signer's payload is at fault, not the server. Anything else
+    // propagates untouched and is still a 500.
+    if (e instanceof SignatureImageError || e instanceof UnknownSignatureFontError) {
+      throw new ValidationError(e.message);
+    }
+    throw e;
+  }
+}
+
+async function stampUnchecked(
   engine: SignEngine,
   pdfBytes: Uint8Array,
   fields: Field[],

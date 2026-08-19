@@ -401,3 +401,69 @@ test("DG3: resend after an envelope completes is a 409", async () => {
 
   await server.close();
 });
+
+// ── Signer-input validation: bad signature payloads are 400s, not 500s ────────
+// Regression: an unknown font key and a malformed signature image both used to
+// escape as opaque 500 "internal server error" (and log at error level), because
+// the font was cast unchecked at the HTTP boundary and finesign-core's typed
+// errors were never mapped. Both are SIGNER input — they must be 400.
+
+test("apply: an unknown typed-signature font is a 400 naming the supported fonts", async () => {
+  const { server, mailer } = await setup();
+  const { token } = await sendOneSigner(server, mailer);
+
+  const res = await server.inject({
+    method: "POST",
+    url: `/sign/${token}/apply`,
+    payload: { signature: { kind: "typed", name: "Alice", font: "comic_sans" }, consent: true },
+  });
+  assert.equal(res.statusCode, 400, res.payload);
+  assert.equal(j(res).error.code, "VALIDATION_ERROR");
+  assert.deepEqual(j(res).error.details.supported, [
+    "dancing_script",
+    "great_vibes",
+    "pacifico",
+    "pinyon_script",
+  ]);
+
+  await server.close();
+});
+
+test("apply: an empty typed-signature name is a 400", async () => {
+  const { server, mailer } = await setup();
+  const { token } = await sendOneSigner(server, mailer);
+
+  const res = await server.inject({
+    method: "POST",
+    url: `/sign/${token}/apply`,
+    payload: { signature: { kind: "typed", name: "   ", font: "great_vibes" }, consent: true },
+  });
+  assert.equal(res.statusCode, 400, res.payload);
+
+  await server.close();
+});
+
+test("apply: a malformed signature image is a 400, and the envelope stays signable", async () => {
+  const { server, mailer } = await setup();
+  const { token } = await sendOneSigner(server, mailer);
+
+  const bad = await server.inject({
+    method: "POST",
+    url: `/sign/${token}/apply`,
+    payload: { signature: { kind: "image", dataUrl: "data:image/png;base64,bm90YW5pbWFnZQ==" }, consent: true },
+  });
+  assert.equal(bad.statusCode, 400, bad.payload);
+  assert.equal(j(bad).error.code, "VALIDATION_ERROR");
+  assert.match(j(bad).error.message, /PNG or JPEG/);
+
+  // The rejected attempt must not have consumed the recipient's turn.
+  const ok = await server.inject({
+    method: "POST",
+    url: `/sign/${token}/apply`,
+    payload: { signature: { kind: "image", dataUrl: signaturePngDataUrl() }, consent: true },
+  });
+  assert.equal(ok.statusCode, 200, ok.payload);
+  assert.equal(j(ok).status, "completed");
+
+  await server.close();
+});

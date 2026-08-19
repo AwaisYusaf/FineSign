@@ -1,5 +1,5 @@
 /**
- * Example: inspect what Signet detects on a form BEFORE signing — useful for
+ * Example: inspect what the engine detects on a form BEFORE signing — useful for
  * building a review UI where a human confirms/corrects the "sign here" spots.
  *
  *   npm run example:detect

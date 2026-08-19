@@ -8,6 +8,7 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { isFineSignError, ValidationError, AuthorizationError, tokensEqual, type Logger } from "@finesign/shared";
+import { SIGNATURE_FONTS, isSignatureFont } from "finesign-core";
 import type { SignatureInput, FieldInput, RecipientRole, FieldKind, RoutingType, DocumentFormat } from "@finesign/domain";
 import type { EnvelopeApp } from "./app";
 
@@ -51,14 +52,24 @@ function parseSignature(body: unknown): SignatureInput {
   const s = b?.signature;
   if (!s || typeof s !== "object") throw new ValidationError("signature is required");
   if (s.kind === "image") {
-    if (typeof s.dataUrl !== "string") throw new ValidationError("signature.dataUrl is required for image signatures");
+    if (typeof s.dataUrl !== "string" || s.dataUrl.length === 0) {
+      throw new ValidationError("signature.dataUrl is required for image signatures");
+    }
     return { kind: "image", dataUrl: s.dataUrl };
   }
   if (s.kind === "typed") {
-    if (typeof s.name !== "string" || typeof s.font !== "string") {
-      throw new ValidationError("signature.name and signature.font are required for typed signatures");
+    if (typeof s.name !== "string" || s.name.trim().length === 0) {
+      throw new ValidationError("signature.name is required for typed signatures");
     }
-    return { kind: "typed", name: s.name, font: s.font as SignatureInput extends { font: infer F } ? F : never };
+    // The font key is caller-supplied and is resolved deep inside stamping, where
+    // an unknown key would surface as an opaque 500. Narrow it here against the
+    // engine's own allowlist so a bad value is a 400 that names the valid set.
+    if (!isSignatureFont(s.font)) {
+      throw new ValidationError("signature.font is not a supported signature font", {
+        supported: [...SIGNATURE_FONTS],
+      });
+    }
+    return { kind: "typed", name: s.name, font: s.font };
   }
   throw new ValidationError('signature.kind must be "image" or "typed"');
 }

@@ -1,5 +1,5 @@
 /**
- * Rotation-aware coordinate transforms between the three spaces Signet juggles:
+ * Rotation-aware coordinate transforms between the three spaces the engine juggles:
  *
  *   1. DISPLAY SPACE      — fractions (0–1) of the *displayed* (rotated) page,
  *                           top-left origin, y-down. The public convention.

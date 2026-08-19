@@ -1,5 +1,5 @@
 /**
- * Signet — an open-source, self-hostable e-signature engine for PDFs.
+ * finesign-core — an open-source, self-hostable e-signature engine for PDFs.
  *
  * Bytes in, bytes out. Give it an unsigned PDF and either typed-name placements
  * or a captured signature image + "sign here" anchors, and it returns the signed
@@ -11,6 +11,7 @@
  */
 
 // ── Types ────────────────────────────────────────────────────────────────────
+export { SIGNATURE_FONTS, isSignatureFont } from "./types";
 export type {
   SignatureFont,
   SignatureFieldKind,
@@ -50,7 +51,7 @@ export {
 export { getPdfInfo, type PdfInfo, type PdfPageInfo } from "./detect/pdf-info";
 
 // ── Fonts ─────────────────────────────────────────────────────────────────────
-export { FontRegistry, defaultFontRegistry } from "./engine/fonts";
+export { FontRegistry, defaultFontRegistry, UnknownSignatureFontError } from "./engine/fonts";
 
 // ── Image helpers ────────────────────────────────────────────────────────────
 export {

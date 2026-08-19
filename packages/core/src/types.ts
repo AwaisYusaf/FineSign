@@ -1,5 +1,5 @@
 /**
- * Signet — public type contracts.
+ * finesign-core — public type contracts.
  *
  * The whole library speaks ONE coordinate convention on its public surface:
  *
@@ -14,15 +14,29 @@
  */
 
 /**
- * The bundled cursive fonts available for *typed-name* signatures. Add your own
- * by registering a `FontProvider` (see `engine/fonts.ts`) — this union is only
- * the built-in set.
+ * The bundled cursive fonts available for *typed-name* signatures, as a runtime
+ * list so callers can validate untrusted input against the same source of truth
+ * the type is derived from. Add your own by registering a font with
+ * `FontRegistry` (see `engine/fonts.ts`) — this set is only the built-in one.
  */
-export type SignatureFont =
-  | "dancing_script"
-  | "great_vibes"
-  | "pacifico"
-  | "pinyon_script";
+export const SIGNATURE_FONTS = [
+  "dancing_script",
+  "great_vibes",
+  "pacifico",
+  "pinyon_script",
+] as const;
+
+/** One of the bundled cursive fonts — derived from `SIGNATURE_FONTS`. */
+export type SignatureFont = (typeof SIGNATURE_FONTS)[number];
+
+/**
+ * Narrow untrusted input to a built-in `SignatureFont`. Use this at your trust
+ * boundary: an unrecognized font is a *caller* error, and resolving one is a
+ * runtime failure deep inside stamping otherwise.
+ */
+export function isSignatureFont(value: unknown): value is SignatureFont {
+  return typeof value === "string" && (SIGNATURE_FONTS as readonly string[]).includes(value);
+}
 
 /** What lands at a target: a signature mark, or the "date signed" beside it. */
 export type SignatureFieldKind = "signature" | "date";
@@ -40,7 +54,7 @@ export interface DisplayBox {
 
 /**
  * A field box in RAW PDF-point space (1pt = 1/72"), TOP-LEFT origin, in the
- * page's UNROTATED frame — the shape most form-extraction tools emit. Signet
+ * page's UNROTATED frame — the shape most form-extraction tools emit. The engine
  * converts these to `DisplayBox` for you via `schemaFieldToDisplayBox`.
  */
 export interface PointBox {
