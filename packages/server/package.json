@@ -22,11 +22,11 @@
     "@finesign/storage": "0.1.0",
     "fastify": "^5.2.0",
     "finesign-core": "0.1.0",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^9.0.5",
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.0.0",
+    "@napi-rs/canvas": "^1.0.7",
     "@types/node": "^24.9.1",
     "@types/nodemailer": "^6.4.24",
     "tsx": "^4.20.6",
