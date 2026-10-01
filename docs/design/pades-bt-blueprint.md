@@ -4,7 +4,7 @@ Verified all code and PKIjs APIs against the installed sources. Here is the blue
 
 # PAdES-B-T Implementation Blueprint — `@finesign/pades`
 
-**Verified against installed code** (`finesign/packages/pades/src/*`) and `finesign/node_modules/pkijs/build/index.d.ts`. All line numbers below are real.
+**Verified against installed code** (`packages/pades/src/*`) and `node_modules/pkijs/build/index.d.ts`. All line numbers below are real.
 
 ## Ground truth (what already exists — do not rebuild)
 

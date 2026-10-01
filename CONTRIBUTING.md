@@ -3,6 +3,12 @@
 Thanks for helping build an open e-signature platform. This project favors
 **small, verifiable changes** over big rewrites.
 
+FineSign was produced with AI coding agents working to the rules in
+[FACTORY.md](FACTORY.md); every change had to pass `npm run gate`, and each
+security-sensitive subsystem also went through an adversarial review whose
+confirmed findings were fixed with regression tests (reports in
+[`docs/review/`](docs/review/)).
+
 ## Ground rules
 
 1. **`npm run gate` must pass.** It is the single source of truth for "is this

@@ -1,6 +1,6 @@
 # PAdES-B-LT / B-LTA — adversarial review + fixes
 
-A 5-lens, 16-agent adversarial review of the long-term-validation code (the
+An adversarial review of the long-term-validation code (the
 hand-rolled incremental writer, DSS, coverage relaxation, revocation, and document
 timestamp), with each finding independently verified. Lenses: coverage/append-attack,
 incremental writer, revocation freshness, document-timestamp coverage, test-CA /

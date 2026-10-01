@@ -1,6 +1,6 @@
 # PAdES-B-T (RFC 3161) — adversarial review + fixes
 
-A 5-lens, 14-agent adversarial review of the PAdES-B-T implementation
+An adversarial review of the PAdES-B-T implementation
 (`@finesign/pades` + server wiring), with each finding independently verified by a
 separate skeptic agent before it counted. Lenses: crypto-correctness, forgery /
 clock-move security, standards conformance, robustness / DoS, integration / config.

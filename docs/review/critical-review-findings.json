@@ -15,7 +15,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/verify.ts:86",
+      "file": "packages/pades/src/verify.ts:86",
       "scenario": "Seal any PDF with an RSA credential via sealPdf(). When the CMS DER's final byte happens to be 0x00 (~1 in 256, the last byte of the RSA signature OCTET STRING), verify.ts:86 strips that genuine byte along with @signpdf's 0x00 padding, truncating the ContentInfo SEQUENCE below its declared length. ContentInfo.fromBER at verify.ts:157 throws, verifyOne records 'could not parse CMS' with integrity=false, and verifyPdf returns valid=false for a self-produced, cryptographically valid document. Verified empirically: padded buffer '3003020100'+zeros parses (offset 5); after strip '30030201' -> asn1js offset -1 and ContentInfo.fromBER throws 'Data is not correct for ContentInfo'.",
       "recommendation": "Do not strip trailing zeros. Pass the full hex-decoded buffer straight to ContentInfo.fromBER (asn1js reads the definite outer length and ignores padding). If a bounded slice is desired, parse the outer TLV length and slice exactly that many bytes rather than trimming 0x00 by regex."
     },
@@ -26,7 +26,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/sign.ts:59",
+      "file": "packages/pades/src/sign.ts:59",
       "scenario": "Seal a PDF today via sealPdf/PadesSigner (e.g. through server/src/sealer.ts). The produced CMS SignerInfo has no unsignedAttrs and thus no RFC 3161 signature-timestamp token; the only time evidence is the self-asserted signing-time attribute (cms.ts:87) and the PDF /M. Later, after the seal certificate expires or the org rotates/revokes keys, open the document in a strict validator (Adobe / ETSI DSS). Because there is no trusted timestamp proving the signature existed before certificate expiry, the validator cannot establish long-term validity: Adobe reports the signature is valid but the signing time came from the signer's computer clock, and a strict LTV validator downgrades or rejects it. No DSS dictionary with OCSP/CRL/certs and no archive timestamp are present, so B-LT/B-LTA validation is impossible as well.",
       "recommendation": "Wire the pending B-T work (task #25): fetch an RFC 3161 token over the signature value and add it as the id-aa-signatureTimeStampToken unsigned attribute via the existing unsignedAttributes path, then plan B-LT (embed OCSP/CRL + certs in a DSS dictionary) and B-LTA (document timestamp)."
     },
@@ -37,7 +37,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/verify.ts:218",
+      "file": "packages/pades/src/verify.ts:218",
       "scenario": "A hand-crafted CMS omits the content-type signed attribute (or sets it to something other than id-data). Because message-digest still matches and the signature over the attrs verifies, verifyOne reports no content-type problem, unlike a strict RFC 5652 verifier.",
       "recommendation": "Read the CONTENT_TYPE (1.2.840.113549.1.9.3) signed attribute, require its presence, and assert its OID value equals the SignedData encapContentInfo eContentType (id-data); add a problem and fail otherwise."
     },
@@ -48,7 +48,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/verify.ts:57",
+      "file": "packages/pades/src/verify.ts:57",
       "scenario": "Take a validly sealed PDF and append e.g. 4096 0x00 bytes after the final ByteRange segment. verifyOne still sets coversWholeDocument=true, so the appended region is silently tolerated.",
       "recommendation": "Drop 0x00 from isWhitespace for the trailing-coverage check (keep only SP/TAB/CR/LF), or require the trailing region to be empty except for a single EOL, so any appended bytes break coverage."
     },
@@ -59,7 +59,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/test/pades.test.ts:6",
+      "file": "packages/pades/test/pades.test.ts:6",
       "scenario": "A future change sets dsaEncoding:'ieee-p1363' or mis-maps ecdsaOid; the RSA-only suite stays green while every EC-signed PDF becomes unverifiable by external validators.",
       "recommendation": "Add an EC (e.g. P-256/SHA-256 and P-384/SHA-384) credential fixture and a seal→verify round-trip test, ideally cross-verified with OpenSSL cms -verify to confirm external-validator acceptance of the DER ECDSA encoding and signatureAlgorithm OID."
     },
@@ -70,7 +70,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/sign.ts:55",
+      "file": "packages/pades/src/sign.ts:55",
       "scenario": "Seal with a credential whose chain() returns several intermediate certs plus a 4096-bit leaf; the assembled CMS exceeds 16384 bytes and sealPdf throws from deep inside @signpdf instead of sizing the reservation.",
       "recommendation": "Estimate the reservation from the actual leaf+chain DER sizes (plus headroom for signature and any timestamp), or catch the size error and retry with a doubled placeholder; expose signatureLength guidance for large-chain deployments."
     },
@@ -81,7 +81,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/verify.ts:288",
+      "file": "packages/pades/src/verify.ts:288",
       "scenario": "verifyPdf(..., { at: <historical date> }) against a chain whose intermediate has since expired reports trusted=true even though, evaluated strictly at `at`, or under a correct historical-validation policy, the chain state differs from the leaf-only check performed here.",
       "recommendation": "Pass the verification instant into the chain engine (checkDate/validityTime) so all certificates in the path are evaluated at `at`, rather than only re-checking the leaf window separately."
     },
@@ -92,7 +92,7 @@
       "severity": "high",
       "correctedSeverity": "high",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/verify.ts:285-292",
+      "file": "packages/pades/src/verify.ts:285-292",
       "scenario": "Verifier is configured in chain-trust mode: options.trustStore = [R] where R is a CA root certificate. Attacker produces a PDF whose content they fully control and signs it with a self-signed key attackerCert (SignerInfo.sid = attackerCert's issuer+serial). The signature's ByteRange starts at a=0 with only trailing whitespace after the Contents, so coversWholeDocument=true; message-digest and signing-certificate-v2 attributes are computed over the attacker content and attackerCert, so integrity/digestMatches/signingCertMatches are all true. Into SignedData.certificates the attacker places [attackerCert, realIntermediate, certX] where certX is any leaf certificate legitimately issued under R (e.g. an unrelated TLS/user cert) and realIntermediate chains certX to R, ordered so certX is LAST. In verifyOne, directlyTrusted is false (attackerCert not pinned), so the chain branch runs: pkijs picks certX (last element) as the leaf, builds certX->realIntermediate->R, basicCheck passes (all real signatures), verify() returns result:true, so verdict.trusted=true. verifyPdf returns valid:true with signerCommonName set to whatever CN the attacker put in attackerCert — a forged document signed by an untrusted self-signed key is reported authentic and trusted.",
       "recommendation": "Tie the trust decision to the actual signer: build/validate the chain with the leaf pinned to `signerCert` (e.g. construct the CertificateChainValidationEngine so signerCert is unambiguously the end-entity, or after `engine.verify()` assert the returned path[0] re-encodes equal to `signerCert`). Preferably delegate to pkijs `sd.verify({ signer:0, data, checkChain:true, trustedCerts })` so the chain is rooted at the SignerInfo's cert, and drop the separate decoupled engine call."
     },
@@ -103,7 +103,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/verify.ts:203-206",
+      "file": "packages/pades/src/verify.ts:203-206",
       "scenario": "Platform seals a PDF with a seal certificate whose notAfter is 2027-01-01. Verification uses `at = new Date()` (verify.ts:149) since no options.at is passed. On 2027-01-02 a user calls verifyPdf on the unchanged, genuinely sealed PDF. At lines 203-205 withinValidity = false; direct-trust path (line 282) and chain-trust path (line 292) both AND with withinValidity, so verdict.trusted = false. In verifyPdf (lines 322-325) `signatures.some(s => s.trusted && s.coversWholeDocument)` is false, so `valid:false` is returned for an authentic, unmodified, cryptographically sound document. Because signing-time (lines 262-266) is display-only and the timestamp verdict is hard-coded absent (line 144, no RFC 3161 verification anywhere), there is no way to validate against signing-time instead, so every previously sealed agreement's verification silently breaks at seal-cert expiry/rollover.",
       "recommendation": "Complete PAdES-B-T (P4): verify an RFC 3161 signature-timestamp token, and evaluate certificate validity (and chain validity, via CertificateChainValidationEngine checkDate) at the trusted timestamp time rather than `new Date()`. Until then, document that verification is only valid within the seal cert's lifetime and consider validating the leaf at signingTime when a trusted timestamp is unavailable."
     },
@@ -114,7 +114,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/verify.ts:322-325",
+      "file": "packages/pades/src/verify.ts:322-325",
       "scenario": "Seal a PDF whose page content displays the literal text \"/ByteRange [0 0 0 0]\" (e.g., FineSign's own PAdES/ADR documentation, a security whitepaper, or a test fixture). sealPdf writes it via pdf-lib with useObjectStreams:false, so the content stream is uncompressed and the string appears as raw latin1 ASCII in the output file. On verifyPdf, extractSignatures now returns two RawSigs: (1) the real trusted whole-document seal (integrity/digest/signingCert all true) and (2) the incidental \"[0 0 0 0]\" literal, for which structureValid is false (c > a+b => 0 > 0 false) so integrity=false. signatures.every(...) evaluates false because of match (2), so verifyPdf returns valid:false even though the genuine seal is cryptographically intact and trusted. Same false negative results from any stray \"/ByteRange [a b c d]\" literal in an uncompressed content stream, XMP metadata, or Info-dictionary string.",
       "recommendation": "Parse actual signature dictionaries via the PDF object structure (the /V of AcroForm signature fields with /Type /Sig and real /Contents) instead of a global text regex, or at minimum ignore ByteRange matches whose gap is not a well-formed `<hex>` Contents and whose values are the [0 0 0 0] placeholder, so verification reflects only genuine signature dictionaries."
     },
@@ -125,7 +125,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/verify.ts:243-248",
+      "file": "packages/pades/src/verify.ts:243-248",
       "scenario": "A signature uses SHA-256 for the document digest but encodes signing-certificate-v2 with an explicit SHA-1 hashAlgorithm over the signer cert. digestNameFromOid returns... nothing for SHA-1 (returns null, so hashName stays 'sha256') — actually the mapping only accepts sha256/384/512, so a weak OID silently falls back to sha256 and the compare fails, producing a confusing 'does not match' rather than an explicit 'weak hash' rejection.",
       "recommendation": "When ESSCertIDv2 carries an explicit hashAlgorithm, reject it if it maps to null or is in WEAK_DIGESTS with a clear 'weak signing-certificate hash' problem, rather than silently defaulting to sha256 and reporting a spurious mismatch."
     },
@@ -136,7 +136,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/verify.ts:110",
+      "file": "packages/pades/src/verify.ts:110",
       "scenario": "A CMS with signer identified by SubjectKeyIdentifier and two embedded certs where the intended signer is certs[1]. findSignerCert returns certs[0]; signingCertMatches compares the signed attribute (hash of certs[1]) against certs[0] and fails, so a legitimately signed document verifies as invalid.",
       "recommendation": "Match the SubjectKeyIdentifier sid against each candidate cert's subjectKeyIdentifier extension (or its computed key hash) and return null on no match, mirroring the strict issuer+serial path — never guess certs[0]."
     },
@@ -147,7 +147,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/verify.ts:57",
+      "file": "packages/pades/src/verify.ts:57",
       "scenario": "Take a genuinely sealed PDF and append 10 KB of 0x00 after %%EOF. verifyPdf still reports coversWholeDocument=true and valid=true, despite bytes existing outside the signed ByteRange.",
       "recommendation": "Drop 0x00 from isWhitespace (or restrict the post-ByteRange tolerance to a single optional EOL), so any non-whitespace byte outside the ByteRange — including NUL — breaks whole-document coverage."
     },
@@ -158,7 +158,7 @@
       "severity": "high",
       "correctedSeverity": "high",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/credential.ts:86-135",
+      "file": "packages/pades/src/credential.ts:86-135",
       "scenario": "Operator sets FINESIGN_SEAL_P12 to a valid ECDSA P-256 organizational signing certificate + correct passphrase (a common PAdES seal setup) and boots the server (container.ts:59 → LocalSigningCredential.fromPkcs12). node-forge's pkcs12FromAsn1 parses successfully but, being RSA-only, silently drops the EC private key (pkcs12.js:682-686 → bag.key=null) and the EC certs (pkcs12.js:706-710 → bag.cert=null). Back in credential.ts, the key bag is present but keyBag.key is null, so line 101 throws ValidationError('PKCS#12 contains no private key'). With FINESIGN_SEAL_REQUIRED=true this is a hard boot failure; the operator is told the P12 has no private key even though it demonstrably does — the true cause is that node-forge cannot read EC key/cert material. A mixed bundle (RSA leaf + EC intermediate CA) loses the EC cert from the chain the same way. Note: the actual error string is 'PKCS#12 contains no private key' (or 'PKCS#12 contains no certificate'), NOT the 'wrong passphrase or corrupt file' message the original finding predicted, because node-forge swallows the EC parse errors rather than throwing them.",
       "recommendation": "Do not parse PKCS#12 with node-forge if EC must be supported. Either (a) parse the PKCS#12 with a library that supports EC (e.g. @peculiar/asn1-schema + pkcs12 from PKI.js, or shell to Node's crypto after converting) and keep the existing SPKI-equality leaf detection, or (b) if RSA-only is acceptable for now, remove the false 'works for RSA and EC (M3)' comment, document PKCS#12 as RSA-only, and reject EC P12 with a clear message. Add an EC PKCS#12 round-trip test so the claim is actually exercised."
     },
@@ -169,7 +169,7 @@
       "severity": "medium",
       "correctedSeverity": "low",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/credential.ts:95-96",
+      "file": "packages/pades/src/credential.ts:95-96",
       "scenario": "Load a PKCS#12 whose private key is EC (P-256) with the correct passphrase, or an RSA P12 using a PBE/PBES2 scheme forge cannot decrypt. forge.pkcs12.pkcs12FromAsn1 (line 94) throws e.g. \"Cannot read private key. OID is not RSA.\" or \"Unsupported OID\"; the catch at line 95-96 rethrows it as \"could not open PKCS#12 (wrong passphrase or corrupt file): Cannot read private key. OID is not RSA.\" The headline asserts a passphrase/corruption problem even though the passphrase is correct and the file is well-formed; the real algorithm-support cause is only visible in the trailing appended message.",
       "recommendation": "Distinguish MAC/passphrase-verification failures (only then claim wrong passphrase) from structural/algorithm-support failures; surface node-forge's specific message as the primary cause for the latter. Still avoid echoing the passphrase (node-forge does not include it, but keep it that way)."
     },
@@ -180,7 +180,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/credential.ts:74",
+      "file": "packages/pades/src/credential.ts:74",
       "scenario": "Load an org key whose asymmetricKeyType is 'rsa-pss' (e.g. a PKCS#12 or PEM restricted to RSASSA-PSS) via LocalSigningCredential.fromParts/fromPkcs12. scheme is set to 'RSASSA-PKCS1-v1_5'. During seal, buildCmsSignedData sets isEc=false and encodes signatureAlgorithm as OID.RSA_ENCRYPTION (rsaEncryption) with NULL params, while credential.sign() calls crypto.sign('sha256', tbs, key), which for the rsa-pss KeyObject emits RSASSA-PSS signature bytes. The resulting CMS declares rsaEncryption but carries a PSS signature, so a strict validator (Adobe/EU DSS) reports an algorithm/signature mismatch and the seal appears cryptographically invalid. Separately, loading an Ed25519 key sets scheme to 'RSASSA-PKCS1-v1_5' at load with no error, then crypto.sign('sha256', tbs, ed25519Key) throws at sign time (Ed25519 requires a null algorithm), failing the signing request instead of being rejected at credential load.",
       "recommendation": "Determine scheme from the actual key type explicitly and reject unsupported types at construction (throw a ValidationError in fromParts/fromPkcs12 for anything other than 'rsa' or 'ec'). This fails fast at load instead of producing a mis-declared or crash-at-sign signature."
     },
@@ -191,7 +191,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/credential.ts:67",
+      "file": "packages/pades/src/credential.ts:67",
       "scenario": "A future refactor that stores an RSA-PSS KeyObject (or sets RSA-PSS key options) would make sign() emit PSS while cms.ts still declares rsaEncryption, producing signatures a strict validator rejects — with no local test catching it.",
       "recommendation": "For the RSA scheme, pass an explicit sign options object pinning padding: crypto.constants.RSA_PKCS1_PADDING (and saltLength is irrelevant for v1.5). Combine with the scheme-classification fix so the declared OID and the padding cannot diverge."
     },
@@ -202,7 +202,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/pades/src/credential.ts:168-169",
+      "file": "packages/pades/src/credential.ts:168-169",
       "scenario": "A developer calls generateSelfSignedCredential without a passphrase and writes the returned pkcs12 to disk for local reuse; the resulting file is protected only by a well-known default passphrase and 3DES.",
       "recommendation": "Require an explicit passphrase (no default) for the exported P12, and prefer an AES-based PKCS#12 encryption algorithm. Keep the function clearly labeled dev/test-only."
     },
@@ -213,7 +213,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/server/src/container.ts:59",
+      "file": "packages/server/src/container.ts:59",
       "scenario": "Deployment sets FINESIGN_SEAL_P12 but the passphrase env var is misspelled/omitted; the loader tries an empty passphrase and fails with the generic 'wrong passphrase or corrupt file', obscuring the fact that the passphrase variable was never provided.",
       "recommendation": "When FINESIGN_SEAL_P12 is set, require FINESIGN_SEAL_PASSPHRASE to be explicitly present (allow an intentional empty value only via an explicit opt-in) and emit a distinct configuration error otherwise."
     },
@@ -224,7 +224,7 @@
       "severity": "high",
       "correctedSeverity": "high",
       "verdict": "confirmed",
-      "file": "finesign/packages/core/src/engine/sign.ts:156",
+      "file": "packages/core/src/engine/sign.ts:156",
       "scenario": "A signer uploads a signature as a base64 PNG data URL whose IHDR declares 20000x20000 pixels but whose IDAT is a single solid color that deflate-compresses to well under 2MB (encoded ~1.5MB). decodeSignatureImage passes the 2MB encoded-byte cap and confirms PNG magic bytes. trimSignatureImage reads declared dims 4x10^8 px > 16M, so it returns the original bytes untrimmed. signWithImage calls pdfDoc.embedPng(originalBytes); upng.decode inflates the IDAT to ~1.2GB of raw scanlines and toRGBA8 allocates 400,000,000 x 4 ≈ 1.6GB (plus splitAlphaChannel copies), exhausting memory and OOM-killing the Fastify server process. Repeating the request is a cheap, unauthenticated-by-any-signer remote DoS.",
       "recommendation": "Enforce a hard pixel-dimension cap BEFORE embedding, not just before trimming. In decodeSignatureImage (or at the top of signWithImage), call readImageDimensions and throw SignatureImageError when declared w*h exceeds an embed cap (e.g. MAX_TRIM_PIXELS). Reject rather than silently skip, so the oversize image never reaches embedPng. Also treat an unreadable/absent IHDR as a rejection for PNGs rather than proceeding to embed."
     },
@@ -235,7 +235,7 @@
       "severity": "high",
       "correctedSeverity": "high",
       "verdict": "confirmed",
-      "file": "finesign/packages/core/src/engine/stamp.ts:42",
+      "file": "packages/core/src/engine/stamp.ts:42",
       "scenario": "Load a PDF whose page MediaBox is [100 100 700 900] (600x800 visible, origin offset by 100,100 — common for cropped scans). In the web UI (or any renderer that shows the cropped/visible page), a signer draws a signature box at the visible top-left; this becomes a DisplayBox ~ {x:0, y:0, width:0.3, height:0.05}. anchorFromDisplayBox accepts it (drawnBoxError passes since it is on-page in fraction terms) with source 'manual'. During signing, stampImageAnchor calls displayBoxToPageRect with rawW=600, rawH=800 (getSize, origin discarded); for rotation 0 the box maps to user-space rawXmin=0, rawYmin=800-h. pdf-lib draws the image at absolute user-space x=0, y~760. But the visible page occupies user-space x in [100,700], y in [100,900], so the mark is placed 100 units left of the visible left edge (clipped off-page) and 100 units below the visible top edge — the signature lands off/mislocated relative to where the signer drew it. The auto-detect+stamp path masks this because its equal-and-opposite offset cancels, so the bug only surfaces for manually/UI-placed boxes or when CropBox differs from MediaBox.",
       "recommendation": "Read page.getMediaBox() { x, y } (and ideally getCropBox()) and offset accordingly: in stamping add the origin (absoluteX += box.x, absoluteY += box.y) to every drawn x/y; in detect/acroform-fields.ts subtract the origin (x: xMin - box.x, y: (box.y + box.height) - yMax). Decide explicitly whether display space is the CropBox or MediaBox and use that box consistently on both the detect and stamp sides."
     },
@@ -246,7 +246,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/core/src/engine/dates.ts:48",
+      "file": "packages/core/src/engine/dates.ts:48",
       "scenario": "One page has anchors: A dateFormat:'full' at x=0.1, plus three unlabeled auto date anchors B/C/D at x=0.4/0.5/0.7. buildDateValues groups them by page and sorts by x → [A(full), B, C, D]. autoGroupSize = 3 (B,C,D). forEach index i: i=0 A → full (ok); i=1 B → [MM,DD,YYYY][1]=DD; i=2 C → [MM,DD,YYYY][2]=YYYY; i=3 D → [MM,DD,YYYY][3]=undefined. So the three split-date boxes are stamped DD, YYYY, and blank (MM never appears; the year box is empty), producing a wrong/blank signing date. sign.ts records D's value as null. The outcome is order-dependent on where the full anchor sorts by x.",
       "recommendation": "Build the ordered auto-only list first (const autos = group.filter(a => a.dateFormat !== 'full' && !month/day/year-labeled)), and when autos.length === 3 assign each auto anchor the component at its index WITHIN that list, e.g. v = [MM,DD,YYYY][autos.indexOf(a)]. Never index the [MM,DD,YYYY] array with the full-group position."
     },
@@ -257,7 +257,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/core/src/engine/dates.ts:22",
+      "file": "packages/core/src/engine/dates.ts:22",
       "scenario": "Server process runs in America/Los_Angeles (UTC-7 in July). A date anchor is stamped at instant 2026-07-11T05:00:00Z, which is 2026-07-10 22:00 local. now.getFullYear()/getMonth()/getDate() return 2026/6/10, so the visible stamp reads 07/10/2026. The audit StampedAnchor.signedAt = now.toISOString() = \"2026-07-11T05:00:00.000Z\". The document shows a signing date of July 10 while the machine audit records July 11 — a contradictory signing date on the signed document. The reverse occurs in eastern zones just after local midnight when UTC is still the previous day.",
       "recommendation": "Pick one timezone convention and apply it to both the stamped text and the audit timestamp — e.g. derive MM/DD/YYYY from UTC (getUTCMonth/getUTCDate/getUTCFullYear) to match toISOString(), or make the timezone an explicit engine option. Document the choice."
     },
@@ -268,7 +268,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/core/src/engine/stamp.ts:91",
+      "file": "packages/core/src/engine/stamp.ts:91",
       "scenario": "A signature anchor placed near the top of the page (display y ~ 0) with a tall/narrow trimmed signature: fill-width scaling makes imgH = 1.6 * rect.height, and bottom-alignment pushes the top of the mark above the page top, where it is clipped and lost — the signature appears cut off.",
       "recommendation": "Cap the extra height to the space available above the box on the displayed page (or clamp imgH so rect.y + imgH stays within the page in the rotated frame), rather than unconditionally allowing 1.6x growth above the anchor."
     },
@@ -279,7 +279,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/core/src/engine/stamp.ts:43",
+      "file": "packages/core/src/engine/stamp.ts:43",
       "scenario": "A malicious/malformed PDF sets a page /Rotate to 45 (PDF spec requires multiples of 90, but nothing enforces it here). toPageCoords normalizes to 0 and returns 0-degree coordinates, but drawText is called with rotate: degrees(45) and the else-branch baseline shift, so the typed name is drawn rotated 45 degrees at a position computed for 0 degrees — landing in the wrong place at the wrong angle.",
       "recommendation": "Snap rotation with normalizeRotation() once at the top of stampTypedName/stampImageAnchor/stampDateAnchor and use that snapped value for both the branch logic and degrees(...), so draw angle and coordinate math always agree."
     },
@@ -290,7 +290,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/core/src/engine/pdf-guards.ts:9",
+      "file": "packages/core/src/engine/pdf-guards.ts:9",
       "scenario": "A caller uploads a text/HTML/binary file whose first 1KB happens to contain '%PDF-' (e.g. an email or log referencing a PDF). isPdfBuffer returns true, NotAPdfError is not thrown, and pdf-lib throws an unstructured error downstream that the server surfaces as a 500 rather than a clean 4xx 'not a PDF'.",
       "recommendation": "Tighten the check to require '%PDF-' at or very near the start (allow only a small BOM/whitespace/junk preamble, e.g. head.trimStart().startsWith('%PDF-') or index of '%PDF-' within the first few bytes), matching the leniency real PDF readers actually use."
     },
@@ -301,7 +301,7 @@
       "severity": "high",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/domain/src/audit.ts:33",
+      "file": "packages/domain/src/audit.ts:33",
       "scenario": "An insider or attacker with write access to the audit-log store wants to erase a 'recipient_declined' event on a declined (never-sealed) envelope. They delete the offending event(s), renumber seq to stay 0..n-1 contiguous, and for every event from that point set prevHash to the prior event's hash and recompute hash = sha256Hex(prevHash, canonicalJson({id,seq,type,at,actor,data})) using the public algorithm in audit.ts:33-38. verifyAuditChain then iterates the chain, finds seq===i, prevHash matches, and each hash recomputes, so it returns -1 (valid). Because the envelope was declined it was never PAdES-sealed, so no signed certificate PDF anchors the original audit tip, and no keyed MAC/signature exists — no party can prove the log was altered.",
       "recommendation": "Bind the chain to a secret or an asymmetric key: either HMAC-SHA256 the core with a server-held key (attacker without the key cannot recompute), or sign the chain head / periodic checkpoints with the same PAdES credential and store the signature outside the mutable row. At minimum, seal the final audit log into the certificate PDF that is PAdES-signed so the log is covered by an external signature. Document in ADR-0003 that unkeyed hashing only defends against non-recomputing edits."
     },
@@ -312,7 +312,7 @@
       "severity": "medium",
       "correctedSeverity": "low",
       "verdict": "confirmed",
-      "file": "finesign/packages/domain/src/envelope-service.ts:150",
+      "file": "packages/domain/src/envelope-service.ts:150",
       "scenario": "Run a full envelope through the server: upload a DOCX (normalized to PDF and added via addDocument), add a signer + field, send, signer signs (applySignature → stamp → setDocumentSigned at app.ts:451), all sign → finalize (certificate built + PAdES seal → setDocumentSigned at app.ts:502 pointing at the certified copy). Now read ONLY the hash-chained audit log: it contains envelope_created, document_added (data: {documentId,name} — no pdfBlobKey/pageCount), recipient_added, field_added, envelope_sent, recipient_notified, recipient_viewed, recipient_signed (data: {recipientId}), envelope_completed (data: {}). No event carries the normalized pdfBlobKey/pageCount nor the final signedBlobKey/certifiedKey. verifyAuditChain still returns -1 (valid). So a reviewer reading only the chain cannot identify which stored blob is the signed-on PDF or which is the delivered final copy. Caveat: this info is still recoverable from the persisted envelope.documents[] state and, for final content, from the certificate-of-completion hashes + PAdES seal — so the practical evidentiary loss is minimal.",
       "recommendation": "Append audit events (e.g. document_normalized with {documentId, pdfBlobKey, pageCount} and document_signed with {documentId, signedBlobKey}) inside setDocumentNormalized and setDocumentSigned, and add the corresponding AuditEventType entries in types.ts. Consider hashing/fingerprinting the blob so the audit binds content, not just a key."
     },
@@ -323,7 +323,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/domain/src/envelope-service.ts:286",
+      "file": "packages/domain/src/envelope-service.ts:286",
       "scenario": "Sender creates an envelope with one signer who has two required fields on a document: a signature field and a text field (both required:true, value:null). validateForSend passes because the signer has >=1 field, so the envelope is sent. The signer submits POST with only a SignatureInput (typed or image). applySignature validates turn/token, sets the recipient status to \"signed\", and stamps only the signature field; the text field's value remains null. allActingSigned returns true, so the envelope transitions to \"completed\" with a permanently-blank required text field — a legally \"completed\" agreement missing a mandatory value (and with no mechanism in the codebase to have filled it).",
       "recommendation": "Accept per-field values in the sign input and, before transitioning to signed, assert every required field owned by the recipient has a non-empty value (and that provided values map to real fields for that recipient/document). Reject with a ValidationError otherwise, and stamp the collected values."
     },
@@ -334,7 +334,7 @@
       "severity": "medium",
       "correctedSeverity": "low",
       "verdict": "confirmed",
-      "file": "finesign/packages/domain/src/state-machine.ts:20",
+      "file": "packages/domain/src/state-machine.ts:20",
       "scenario": "Create an envelope with one required signer and send it. The signer is notified (status `notified`, token expires now+14d) but never signs. After 14 days: (a) `resolveToken` throws TOKEN_EXPIRED, so the signer can no longer open the link; (b) even reaching `applySignature` throws TOKEN_EXPIRED (envelope-service.ts:301). No domain call can re-mint the token — `notify()` would throw IllegalTransitionError (notified→notified not allowed). The envelope stays `status: \"sent\"` indefinitely: it can never auto-complete, never auto-expire to a terminal state, and continues to appear in any \"pending/active\" listing. The only exit is the sender manually calling `voidEnvelope` (POST .../void).",
       "recommendation": "Add an 'expired' terminal EnvelopeStatus with transition sent→expired, plus a service method (driven by the server's clock/scheduler) that expires an envelope past a configurable expiry and a supported re-notify/re-issue-token path for a still-active recipient. Audit the expiration."
     },
@@ -345,7 +345,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/domain/src/envelope-service.ts:363",
+      "file": "packages/domain/src/envelope-service.ts:363",
       "scenario": "Recipient A declines with reason 'I won't sign because B falsified the figures'. Recipient B (and every other cc/signer) receives an email containing that verbatim reason, leaking A's private rationale to all parties.",
       "recommendation": "Include the reason only in the sender-directed notify effect; send other recipients a reason-less 'envelope was declined' notification (drop note on the fan-out at lines 363-364)."
     },
@@ -356,7 +356,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/domain/src/routing.ts:28",
+      "file": "packages/domain/src/routing.ts:28",
       "scenario": "Sequential envelope: signer@order1, cc-counsel@order2, signer@order3. The sender expects counsel to be copied after order 1 signs and before order 3. Counsel is never notified until the entire envelope completes, defeating the intended mid-flow disclosure.",
       "recommendation": "Extend sequential routing so that when a routing order becomes the active/just-completed order, cc recipients at that order receive a 'copy' notification; track cc-notified state to keep it idempotent. Alternatively document explicitly that cc is end-of-flow only."
     },
@@ -367,7 +367,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/domain/src/envelope-service.ts:276",
+      "file": "packages/domain/src/envelope-service.ts:276",
       "scenario": "A maintainer later relaxes the guard to 'allow marking viewed unless signed/declined' to support re-opens; because the transition is not asserted, a recipient in 'pending' (or any non-table-checked state) could be forced to 'viewed', bypassing the pending→notified→viewed ordering the table encodes.",
       "recommendation": "Use assertRecipientTransition(rec.status, 'viewed') (keeping the idempotent no-op return for non-'notified' states), so the single source of truth for legality remains the transition table."
     },
@@ -378,7 +378,7 @@
       "severity": "high",
       "correctedSeverity": "high",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/app.ts:298",
+      "file": "packages/server/src/app.ts:298",
       "scenario": "Signer double-clicks 'Finish' (or attacker replays POST /sign/:token with the same still-valid token twice within the request window). Requests A and B both await resolveToken and each sees status='sent' and the recipient still notified/viewed. Both run the synchronous domain applySignature and pass every guard (ENVELOPE_NOT_SENT, RECIPIENT_NOT_SIGNER, NOT_YOUR_TURN, state-machine transitions). Both await stamp, writing two distinct env/{id}/signed/{docId}-{uuid}.pdf blobs. If this is the last acting signer, both hit the allActingSigned branch: each emits a finalize effect (build certificate + append + PAdES seal, writing certKey(env.id) twice) plus completed_copy notify effects for every recipient — so completion/certificate emails fire twice and two divergent signed/certified PDFs are produced. Both then call repo.save (last-write-wins on the aggregate) after the duplicate external side effects have already occurred. In sequential routing the non-completing branch instead calls issueToken() for the next recipient in each request, notifying them twice and, because refreshTokens is last-write-wins, leaving one of the two emailed next-recipient links dead.",
       "recommendation": "Add optimistic concurrency: carry a monotonically increasing envelope version/seq in the aggregate and make save() a conditional UPDATE (`... WHERE id=$ AND version=$expected`) that throws a ConflictError when rowCount=0, or take `SELECT ... FOR UPDATE` on the envelope row inside the same transaction as the token lookup and the save. Re-load-and-retry or surface 409 on conflict so only one signature per recipient can ever be committed."
     },
@@ -389,7 +389,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/domain/src/envelope-service.ts:326",
+      "file": "packages/domain/src/envelope-service.ts:326",
       "scenario": "Sender (senderEmail = alice@x.com) creates an envelope with a single signer bob@y.com (role \"signer\") and no cc. Bob opens the link and signs. allActingSigned(next) becomes true, so applySignature takes the completed branch (envelope-service.ts:321): it sets status=completed, pushes a `finalize` effect (certificate + sealed PDF are produced), and loops over next.recipients emitting one `completed_copy` notify for Bob. The server sends Bob a \"Completed: <title>\" email with the signed copy. No effect has toSender=true, so app.notify is never called with env.senderEmail — Alice receives zero emails about completion and gets no link to the finished sealed document; she must poll the API to discover the agreement completed.",
       "recommendation": "In the completion branch, also push a sender-targeted notify effect, e.g. `effects.push({ type: 'notify', toSender: true, reason: 'completed_copy' })`, and have the server deliver the sender a download link to the completed copy/certificate."
     },
@@ -400,7 +400,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/domain/src/validation.ts:50",
+      "file": "packages/domain/src/validation.ts:50",
       "scenario": "Sender creates an envelope with two normalized PDFs: contract.pdf (one signature field for signer Alice) and appendix.pdf (zero fields). validateForSend passes because the only signer, Alice, has a field. Alice signs; the stamp effect's documentIds contains only contract.pdf's id, so appendix.pdf's signedBlobKey stays null. Envelope transitions sent→completed and finalize() runs: the certificate lists BOTH contract.pdf and appendix.pdf with sha256 hashes under \"Documents\", but the seal/append loop skips appendix.pdf (signedBlobKey null), so it is never PAdES-sealed and gets no appended certificate page. Downloading appendix.pdf serves the plain normalized pdfBlobKey. Result: a completed envelope delivers an unsigned, unsealed document with no certificate page, while its certificate of completion attests it as part of the sealed agreement — and this happens even when config.sealRequired is true.",
       "recommendation": "Either reject at send time any document with zero fields (add a validateForSend check), or explicitly seal/stamp supplemental documents and mark them as 'supplemental / unsigned' on the certificate so the certificate does not imply they were signed."
     },
@@ -411,7 +411,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/domain/src/envelope-service.ts:362",
+      "file": "packages/domain/src/envelope-service.ts:362",
       "scenario": "Create a sequential envelope with recipient A (routingOrder 1, external counterparty, signer) and recipient B (routingOrder 2, internal exec, signer). On send(), only A is notified (B stays `pending`, no token, no email). A calls decline() with reason \"terms unacceptable, deal off\". decline() produces notify effects for all recipients except A — including B. The server emails B at their address with subject `Declined: {title}` and body `{B.name}, \"{title}\" was declined: terms unacceptable, deal off.` B — who never received a signing link and may not have known the envelope existed — now learns the envelope title and A's free-text decline reason.",
       "recommendation": "Restrict decline notifications to the sender plus recipients who were already engaged (status !== 'pending', i.e. notified/viewed/signed). Optionally sanitize/escape the decline note before placing it in email/PDF output."
     },
@@ -422,7 +422,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/app.ts:222",
+      "file": "packages/server/src/app.ts:222",
       "scenario": "Sender calls POST /api/envelopes/:id/send. svc.send() transitions draft→sent, mints a token for the active signer (recipient stored with tokenHash only), and persistThenDeliver saves the envelope as \"sent\" at app.ts:388. SMTP is momentarily down, so mailer.send() for the \"your_turn\" effect throws at app.ts:432; the exception propagates and the API returns 500. State is now: envelope=\"sent\" (durably saved), recipient.tokenHash set, raw token discarded. The signer never received a link. The sender retries POST .../send → requireDraft() throws ConflictError ENVELOPE_NOT_DRAFT. There is no resend/re-notify endpoint and the mailer never retries. The only options are void (kills the agreement) or manual DB surgery. The agreement is permanently un-completable via the API.",
       "recommendation": "Add a resend/re-notify operation that re-mints a token for the currently-active recipients and re-emits notify effects for a sent envelope, and/or make notify delivery a durable, retried outbox job so a transient mail failure does not strand the envelope."
     },
@@ -433,7 +433,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/domain/src/envelope-service.ts:341",
+      "file": "packages/domain/src/envelope-service.ts:341",
       "scenario": "A recipient in a later sequential group who somehow retains a valid token (e.g. re-notified then routing changed), or a future internal caller, invokes decline() out of turn; the whole envelope is killed (terminal) even though it was not that recipient's turn to act.",
       "recommendation": "Mirror applySignature's guards in decline(): require recipientMayAct(env, recipientId) (and isActingRole) before allowing the decline, and check token expiry, so only a recipient whose turn is currently active can decline."
     },
@@ -521,7 +521,7 @@
       "severity": "high",
       "correctedSeverity": "high",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/app.ts:491",
+      "file": "packages/server/src/app.ts:491",
       "scenario": "Set FINESIGN_SEAL_REQUIRED=true with a sealer configured. Create an envelope with Doc A (a PDF carrying the signer's signature field) and Doc B (a supporting exhibit PDF with no fields for any recipient). validateForSend passes (the single signer has a field on Doc A; Doc B needs none). Send and have the signer sign. On the sent->completed transition: envelope-service.ts:318 emits a stamp effect with documentIds=[Doc A] only, so Doc A is stamped and gets signedBlobKey; Doc B is never stamped and signedBlobKey stays null. In finalize(), Doc A is stamped+certified+sealed, but the loop at app.ts:490 hits 'if (!d.signedBlobKey) continue' for Doc B and skips it entirely. GET /api/envelopes/:id/documents/:docB then returns Doc B's raw pdfBlobKey bytes (the pre-signature normalized PDF, filename without '.signed'), and verifyDocument on Doc B returns { valid:false, signatureCount:0 } — an unsigned, unsealed document delivered inside a 'completed' envelope for which the operator believes the seal-required fail-closed guarantee held.",
       "recommendation": "In finalize(), do not skip documents lacking signedBlobKey when sealing. For every document with a pdfBlobKey, append the certificate and seal the resulting bytes (start from signedBlobKey ?? pdfBlobKey), then set signedBlobKey to the sealed key — so every delivered document in a completed envelope is sealed. When sealRequired is true, additionally assert post-condition that every document ended with a sealed signedBlobKey (throw SEAL_UNAVAILABLE otherwise) so the fail-closed guard covers per-document coverage, not merely sealer presence."
     },
@@ -532,7 +532,7 @@
       "severity": "high",
       "correctedSeverity": "high",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/app.ts:388",
+      "file": "packages/server/src/app.ts:388",
       "scenario": "Parallel envelope (routingType='parallel'), signers A and B both active/notified, status 'sent'. A and B POST their signatures concurrently. Request A's resolveToken reads snapshot S={A:notified,B:notified}; Request B's resolveToken also reads S before A has saved. Request A: svc.applySignature marks A signed, allActingSigned(next)=false (B still notified in its snapshot), no finalize; persistThenDeliver runs stamp for A which awaits blobs.put (yielding the event loop to B), then will call repo.save({A:signed,B:notified}). Request B: on its stale snapshot S, marks B signed, allActingSigned=false (A still notified), stamps B, then repo.save({A:notified,B:signed}) overwrites A's row. Final persisted state loses A's 'signed' status, A's stamped signedBlobKey pointer, and A's recipient_signed audit event; the finalize/notify(completed_copy) effects never ran for either request, so the envelope remains 'sent' permanently and is never certified or PAdES-sealed. A recorded signature is silently dropped.",
       "recommendation": "Add optimistic concurrency: store a monotonically increasing version on the envelope, have save() do a conditional UPDATE ... WHERE id=? AND version=? and throw a ConflictError (retryable) when zero rows change; surface it as HTTP 409 so the client retries against fresh state. Alternatively serialize per-envelope mutations (per-id async mutex / SELECT ... FOR UPDATE on Postgres). Apply the same guard in the in-memory and Postgres repositories so the contract suite covers it."
     },
@@ -543,7 +543,7 @@
       "severity": "medium",
       "correctedSeverity": "low",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/app.ts:476",
+      "file": "packages/server/src/app.ts:476",
       "scenario": "Envelope completes; finalize() hashes the stamped signed blob (env/{id}/signed/{docId}-{ids.id()}.pdf), then appends the Certificate of Completion and PAdES-seals the result into env/{id}/signed/{docId}-certified-{ids.id()}.pdf, repointing signedBlobKey there. An external validator downloads the completed PDF via downloadDocument (which now returns the certified/sealed bytes), reads the \"Documents / sha256: ...\" line in the embedded certificate, and tries to recompute it. downloadDocument and verifyDocument only ever expose the certified/sealed key; downloadCertificate returns just the standalone certificate PDF; the pre-certificate signed blob remains in the blob store but is unreferenced by the envelope and served by no route. No obtainable byte stream reproduces the printed digest. (Impact is limited: the code documents verifyAuditChain / the PAdES seal as the actual integrity mechanism, so the printed hash is a non-load-bearing human-readable field, and the limitation is inherent to embedding the certificate in the sealed document.)",
       "recommendation": "Define the certificate document hash over a stable, retrievable artifact and document which one it is: either (a) hash the final delivered bytes for each document (requires a two-pass build or embedding the hash of the signed content that is itself independently downloadable), or (b) retain and expose the exact bytes that were hashed (e.g. keep the pre-certificate stamped copy addressable and downloadable). At minimum, label the hash in the certificate with the precise stage it covers so a validator knows what to compare against."
     },
@@ -554,7 +554,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/http.ts:56",
+      "file": "packages/server/src/http.ts:56",
       "scenario": "With defaults (maxUploadBytes = 10 MB), POST /api/envelopes/:id/documents with a valid 9.5 MB PDF encoded as contentBase64 (~12.67 MB of JSON body) is rejected by Fastify's bodyLimit (12 MB) with a 413 before app.addDocument runs, even though 9.5 MB < the configured 10 MB limit. Setting overrides.config.maxUploadBytes higher (e.g. 20 MB) does not help because bodyLimit at http.ts:56 is a hard-coded 12*1024*1024 literal, so uploads above ~9 MB decoded remain impossible.",
       "recommendation": "Derive bodyLimit from config: pass `bodyLimit = Math.ceil(config.maxUploadBytes * 4 / 3) + slack` into `Fastify({...})`, or better, accept uploads as raw binary (multipart/octet-stream) rather than base64-in-JSON so the size limits map 1:1. At minimum document the base64 relationship and set maxUploadBytes below the effective body cap."
     },
@@ -565,7 +565,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/http.ts:144",
+      "file": "packages/server/src/http.ts:144",
       "scenario": "Authenticated caller sends `GET /api/envelopes?limit=99999999` against a DB with many envelopes: http.ts computes Number(\"99999999\")=99999999, passes {limit:99999999} through app.listEnvelopes to repo.list, which runs `SELECT data FROM envelopes ... LIMIT 99999999 OFFSET 0` (SQLite) or `LIMIT 99999999` (Postgres), loading and JSON.parsing every row into memory and serializing one giant response — memory/CPU DoS with no max page size. Separately, `GET /api/envelopes?offset=-1` on the Postgres repo yields `OFFSET -1`, which pg rejects with 'OFFSET must not be negative'; the unhandled error is caught at http.ts:110-112 and returned as a generic 500 INTERNAL instead of a 400.",
       "recommendation": "Validate and clamp in the route: reject non-finite/negative values with a 400, coerce with `Math.trunc`, and clamp limit to a sane maximum (e.g. `Math.min(Math.max(1, n), 100)`) with a default page size when absent. Do the same for offset (>= 0)."
     },
@@ -576,7 +576,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/app.ts:175",
+      "file": "packages/server/src/app.ts:175",
       "scenario": "Holder of the management API key POSTs to /api/envelopes/:id/documents with format=pdf and a ~200 KB body whose first bytes are `%PDF-` (passes assertMagic and isPdfBuffer). The body contains a cross-reference stream plus a FlateDecode object stream (/Type /ObjStm) whose ~150 KB of highly repetitive compressed data inflates to hundreds of MB of tiny object definitions, with /N declaring millions of objects. normalizeDocument → getPdfInfo → PDFDocument.load makes pdf-lib inflate the object stream and parse every declared object into memory, and getPages() walks the resulting tree — multiple seconds of CPU and large heap allocation per request, with no timeout or cap to interrupt it. A handful of such requests concurrently (far under the 300/min limit) pins the Node event loop and drives heap pressure. The equivalent hostile DOCX would be bounded by the 60 s timeout / 64 MB maxBuffer; the PDF path has neither.",
       "recommendation": "Wrap PDF parsing (and downstream stamping) in the same wall-clock timeout used for DOCX, cap page count (reject PDFs over e.g. a few hundred pages), run parsing in a worker thread/subprocess so a runaway parse can be killed, and add a stricter per-route rate limit on the upload endpoint. Validate the full %PDF- header at offset 0 and presence of an EOF/xref rather than substring-in-first-1KB."
     },
@@ -587,7 +587,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/domain/src/envelope-service.ts:167",
+      "file": "packages/domain/src/envelope-service.ts:167",
       "scenario": "Authenticated sender sets an envelope title containing CRLF and header-like text, or a recipient email containing CRLF; with a MailTransport that does not sanitize headers this injects additional SMTP headers (Bcc/Reply-To) or malformed messages.",
       "recommendation": "Validate email against a real address grammar and reject any control characters (CR/LF) in email, name, and title at the domain boundary; cap their lengths. Do not depend on the transport to sanitize."
     },
@@ -598,7 +598,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/storage/src/blob-store.ts:62-69",
+      "file": "packages/storage/src/blob-store.ts:62-69",
       "scenario": "A completed envelope's certificate blob exists on disk, but its parent directory permissions are changed to mode 000 (or the underlying volume returns EIO). Client calls downloadCertificate(envelopeId) → app.ts:358 calls blobs.exists(certKey(id)) → LocalFsBlobStore.exists() runs fs.access() which throws EACCES/EIO → bare catch returns false → downloadCertificate throws NotFoundError(\"certificate is available only after completion\"). The operator/user sees a benign \"not ready yet\" 404 instead of the real permission/IO error, so the actual infrastructure fault is silently masked (whereas get() on the same blob would correctly surface the EACCES/EIO).",
       "recommendation": "Mirror get(): treat only ENOENT (and arguably ENOTDIR for a missing intermediate segment) as false; re-throw every other errno so real faults surface instead of being reported as absence."
     },
@@ -609,7 +609,7 @@
       "severity": "medium",
       "correctedSeverity": "low",
       "verdict": "confirmed",
-      "file": "finesign/packages/storage/src/sqlite-repository.ts:36-39 (schema :24, :31)",
+      "file": "packages/storage/src/sqlite-repository.ts:36-39 (schema :24, :31)",
       "scenario": "Run two server processes (or two SqliteEnvelopeRepository instances in separate processes) against the same SQLite file in WAL mode. Existing MAX(seq)=4. Process A calls create(envA): nextSeq() SELECTs MAX=4 and returns 5. Before A's persist() transaction commits, Process B calls create(envB): its nextSeq() also SELECTs MAX=4 and returns 5. Both then run persist() with distinct primary keys (envA.id, envB.id) but seq=5; since seq has no UNIQUE constraint, both INSERTs succeed, leaving two rows with seq=5. list() ORDER BY seq ASC now has a tie between envA and envB whose relative order is undefined by SQL semantics, and seq is no longer monotonic as nextSeq() claims. (Not reproducible single-process: better-sqlite3 is synchronous and create() has no await between nextSeq() and persist().)",
       "recommendation": "Make seq an AUTOINCREMENT/rowid-backed monotonic column assigned by the DB (e.g. `seq INTEGER` populated from a dedicated AUTOINCREMENT table or use the implicit rowid) and add UNIQUE/NOT NULL, rather than a read-modify-write MAX+1. As a secondary tiebreaker, order by `(seq, id)` so equal seq still yields a deterministic order."
     },
@@ -620,7 +620,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/storage/src/blob-store.ts:41-46",
+      "file": "packages/storage/src/blob-store.ts:41-46",
       "scenario": "Server signs a document and calls put('envelopes/e1/signed.pdf', bytes) on the default LocalFsBlobStore. fs.writeFile truncates the target file and begins writing the buffer; the process is killed (OOM/deploy restart/power loss) after only part of the buffer is flushed. The key now holds a truncated PDF. A later get('envelopes/e1/signed.pdf') sees a present (non-ENOENT) file and returns the partial bytes with no error or integrity signal, so the recipient/PAdES validator receives a structurally invalid signed PDF.",
       "recommendation": "Write to a temp file in the same directory (e.g. `${full}.<rand>.tmp`) then `fs.rename` into place — rename is atomic within a filesystem — and optionally fsync before rename for crash durability. This also makes concurrent puts last-writer-wins on a whole object rather than interleaving bytes."
     },
@@ -631,7 +631,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/storage/src/postgres-repository.ts:114-118 (compare sqlite-repository.ts:44)",
+      "file": "packages/storage/src/postgres-repository.ts:114-118 (compare sqlite-repository.ts:44)",
       "scenario": "A caller save()s an envelope whose in-memory createdAt differs from what was first persisted (e.g. a normalization change). On Postgres the created_at column stays stale; on SQLite it updates. Any future query or migration that trusts these columns instead of the JSON blob would get adapter-dependent results.",
       "recommendation": "Either drop the unused status/created_at columns and rely solely on the JSON aggregate, or make all three adapters update them identically on save (and document them as a queryable index, then actually use them). Pick one so the adapters cannot drift."
     },
@@ -642,7 +642,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/storage/src/postgres-repository.ts:40-57",
+      "file": "packages/storage/src/postgres-repository.ts:40-57",
       "scenario": "Two server replicas start at the same moment against a fresh database. Both run CREATE TABLE IF NOT EXISTS envelopes concurrently; one raises 'duplicate key value violates unique constraint pg_type_typname_nsp_index' / 'tuple concurrently updated'. That instance's ready promise rejects and all its create/save/find calls fail thereafter.",
       "recommendation": "Wrap DDL bootstrap in a session-level advisory lock (`pg_advisory_lock`/`pg_advisory_xact_lock`) so only one initializer runs at a time, or run migrations as a separate one-shot step rather than in the constructor. Also consider retrying init once on a concurrent-DDL error rather than caching a permanent rejection."
     },
@@ -653,7 +653,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/storage/src/blob-store.ts:31-39",
+      "file": "packages/storage/src/blob-store.ts:31-39",
       "scenario": "An attacker with limited local write access creates a symlink root/escape -> /etc inside the blob root. A later put('escape/passwd', bytes) resolves lexically to root/escape/passwd (passes the startsWith check) and writes through the symlink to /etc/passwd.",
       "recommendation": "After lexical validation, resolve the real path of the deepest existing ancestor (fs.realpath) and re-assert it is still contained under realpath(root) before reading/writing; reject keys whose resolved target escapes root. Alternatively store blobs under a flat hashed layout that never creates traversable directory structure."
     },
@@ -664,7 +664,7 @@
       "severity": "high",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/convert/src/docx-libreoffice.ts:83",
+      "file": "packages/convert/src/docx-libreoffice.ts:83",
       "scenario": "A user uploads a DOCX whose first four bytes are PK\\x03\\x04 (passing assertMagic at app.ts:524) but whose internal OOXML is corrupt/unsupported. In makeLibreOfficeRunner, soffice opens it and exits 0 without writing dir/in.pdf (a known LibreOffice behavior). fs.readFile(path.join(dir,\"in.pdf\")) at line 79 throws ENOENT. The catch at line 83 sees e.code === \"ENOENT\" and throws ConverterUnavailableError, so the API responds HTTP 503 CONVERTER_UNAVAILABLE with message 'LibreOffice binary \"soffice\" not found. Install LibreOffice...' even though LibreOffice is installed and running fine. The correct response would be HTTP 502 DOCX_CONVERSION_FAILED.",
       "recommendation": "Distinguish the two failures explicitly. Only map execFile's spawn ENOENT to ConverterUnavailableError — e.g. detect it via e.syscall === 'spawn ' + binary or by catching the execFile call separately from the readFile call. Wrap the fs.readFile(outPath) in its own try/catch and throw DocxConversionError('LibreOffice produced no PDF output for the document') on ENOENT there, so a bad document yields 502 DOCX_CONVERSION_FAILED with an accurate message."
     },
@@ -675,7 +675,7 @@
       "severity": "high",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/convert/src/docx-libreoffice.ts:79",
+      "file": "packages/convert/src/docx-libreoffice.ts:79",
       "scenario": "Attacker sends POST requests whose body is a valid DOCX under the 12MB Fastify bodyLimit but crafted so LibreOffice renders a very large PDF (e.g. a large raster image tiled/repeated across many thousands of pages, or dense vector fills). soffice writes the large PDF to /tmp/finesign-docx-*/in.pdf within the 60s timeout; line 79 `fs.readFile(outPath)` buffers the entire multi-hundred-MB file into a single Node Buffer, and it stays resident through normalizeDocument/getPdfInfo. Firing a handful of such uploads in parallel stacks several unbounded per-request buffers simultaneously, exhausting the Node heap and OOM-killing the single Fastify process. No code path between fs.readFile and the response enforces any output-size limit.",
       "recommendation": "Stat the output file first and reject if it exceeds a configured max (e.g. throw DocxConversionError when size > MAX_PDF_BYTES) before reading. Better, cap it end-to-end: bound disk usage (ulimit/quota on the temp dir in the sandbox from X.7) and stream/size-check the PDF rather than fs.readFile-ing an attacker-influenced file wholesale."
     },
@@ -686,7 +686,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/convert/src/docx-libreoffice.ts:76",
+      "file": "packages/convert/src/docx-libreoffice.ts:76",
       "scenario": "An attacker (or any user permitted to submit .docx for signing) uploads N DOCX files each crafted to make LibreOffice spin past 60s (e.g., pathological layout/recalc). Each request hits CONVERSION_TIMEOUT_MS; execFile sends SIGTERM to the soffice wrapper only. The promise rejects with DocxConversionError and the temp dir is removed, so the request appears to \"fail cleanly\" — but N orphaned soffice.bin processes remain, each pinning a CPU core and holding memory. Repeated submissions accumulate orphans until CPU/memory are exhausted, degrading or hanging the host despite the timeout appearing to fire. Concretely reproducible by pointing `binary` at a wrapper-style soffice and feeding a document whose conversion exceeds 60s: after the rejection, `pgrep soffice.bin` still shows a live, CPU-consuming process.",
       "recommendation": "Kill the whole process group, not just the wrapper: spawn with detached:true and on timeout process.kill(-child.pid, 'SIGKILL') (or use killSignal:'SIGKILL' plus a process-group kill / a container that is torn down per conversion). This should be part of the X.7 sandbox: run each conversion in a disposable container/cgroup with CPU+memory+pids limits so orphans cannot survive the request."
     },
@@ -697,7 +697,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/convert/src/docx-libreoffice.ts:62",
+      "file": "packages/convert/src/docx-libreoffice.ts:62",
       "scenario": "Operator follows README §58 and installs LibreOffice on the server host; the default DI container (container.ts:108) has LibreOfficeDocxConverter active. An authenticated attacker uploads a .docx whose document.xml/relationships reference an internal URL such as http://169.254.169.254/latest/meta-data/iam/security-credentials/ as a linked image or external data source. When toPdf() runs the default runner, `soffice --headless --convert-to pdf` resolves that external reference over the network from inside the server's trust context — an SSRF to the cloud instance-metadata endpoint — with no egress filtering to stop it. Substituting a document that triggers a known LibreOffice OLE/import-filter memory-corruption CVE yields code execution in the server process's uid instead.",
       "recommendation": "Do not treat sandboxing as purely optional runtime config: run soffice inside a locked-down sandbox by default (container/gVisor/firejail/seccomp with no network namespace, read-only fs except the temp dir, non-root, cgroup CPU/mem/pids limits). At minimum, make LibreOfficeDocxConverter refuse to run unless an isolation wrapper is configured, and disable macro execution / external link resolution explicitly. Land BACKLOG X.7 before this path is exposed to untrusted uploads."
     },
@@ -708,7 +708,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/convert/src/docx-libreoffice.ts:108",
+      "file": "packages/convert/src/docx-libreoffice.ts:108",
       "scenario": "A conversion produces a truncated PDF (header written, body incomplete). isPdfBuffer returns true, toPdf returns the corrupt bytes; normalizeDocument's getPdfInfo (composite.ts:32) then fails deep in pdf-lib, producing an opaque 500 instead of a clean DOCX_CONVERSION_FAILED.",
       "recommendation": "Strengthen the post-conversion check: parse the produced PDF (reuse getPdfInfo / pdf-lib load with pageCount > 0) inside toPdf and throw DocxConversionError on failure, so a malformed output is caught here with an accurate 502 rather than leaking a parse crash downstream."
     },
@@ -719,7 +719,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/server/src/app.ts:518",
+      "file": "packages/server/src/app.ts:518",
       "scenario": "Attacker declares format 'pdf' and uploads a polyglot (e.g. an HTML or ZIP file containing '%PDF-' within the first 1KB). PdfPassthroughConverter returns it verbatim as the stored/original document; downstream consumers that trust the declared type are served a non-PDF, or the DOCX path is fed a non-Word ZIP.",
       "recommendation": "Validate the actual container: for DOCX, open the ZIP central directory and require [Content_Types].xml with the WordprocessingML content type; for PDF, require the file to START with %PDF- (allow only a small BOM offset) and confirm pdf-lib can load it. Reject on mismatch before storage/conversion."
     },
@@ -730,7 +730,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/pades/src/verify.ts:86",
+      "file": "packages/pades/src/verify.ts:86",
       "scenario": "Server seals a completed envelope with an RSA-2048 credential; the raw PKCS#1 signature happens to end in a 0x00 byte (p ~= 1/256), so the CMS DER spliced into /Contents ends in 0x00. On GET /api/envelopes/:id/documents/:documentId/verify, extractSignatures strips that genuine trailing 0x00 (along with the padding) at verify.ts:86, yielding a DER one byte short of its declared length. ContentInfo.fromBER throws, verifyOne records 'could not parse CMS' with integrity:false, and verifyPdf returns { valid:false, ... } for an authentic, intact seal — a non-deterministic ~0.4% false negative on the platform's core verification guarantee.",
       "recommendation": "Do not strip trailing 00 pairs. Read the CMS length from the DER TLV header at offset 0 (tag+length) and slice exactly that many bytes: parse ContentInfo from `hexBuffer` and let asn1js consume only the declared length, ignoring trailing padding. Add a regression test that seals+verifies a fixed key/signature whose CMS DER ends in 0x00."
     },
@@ -741,7 +741,7 @@
       "severity": "medium",
       "correctedSeverity": "medium",
       "verdict": "confirmed",
-      "file": "finesign/packages/server/src/stamping.ts:102",
+      "file": "packages/server/src/stamping.ts:102",
       "scenario": "Sender creates an envelope, adds a document, adds one signer, and adds two fields for that signer via POST /api/envelopes/:id/fields (http.ts:184-191): a `signature` field and a `text` field with `required: true` (e.g. a mandatory initials/disclosure line). Sender sends the envelope. The signer opens /sign/:token and POSTs to the apply route with `{ signature: { kind: \"typed\", name: \"Jane Doe\", font: ... } }` (or an image). applySignature marks the recipient signed; since they are the only acting signer, allActingSigned is true, so the envelope transitions to `completed` and finalize runs. stampForRecipient stamps the signature but pushes the text field into `summary.skipped`; app.ts:452 logs a warning only. Result: envelope status = completed, certificate of completion generated and PDF sealed, with the required text field permanently blank — success reported to the sender and signer despite the agreement being incomplete.",
       "recommendation": "Enforce required-field completeness in the domain: either reject the signing API when a recipient has unfilled `required` fields of a kind the platform cannot yet capture, or extend applySignature/SignatureInput to accept field values and validate all required fields are present before transitioning the recipient to 'signed'. At minimum, fail-closed (ValidationError) instead of logging a warning when required fields land in `skipped`."
     },
@@ -752,7 +752,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/server/src/http.ts:56",
+      "file": "packages/server/src/http.ts:56",
       "scenario": "User uploads a valid 9.8MB PDF (under the documented 10MB limit). The request is base64-inflated to ~13.1MB, exceeds bodyLimit, and returns an opaque 413 instead of succeeding — the configured maxUploadBytes is never actually enforceable at its stated value.",
       "recommendation": "Set Fastify bodyLimit to at least ceil(maxUploadBytes*4/3) plus JSON overhead (e.g. maxUploadBytes*1.4), derive both from the same AppConfig.maxUploadBytes value so they can't drift, and map the Fastify 413 to the same error code/shape as the domain size check."
     },
@@ -763,7 +763,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/server/src/http.ts:88",
+      "file": "packages/server/src/http.ts:88",
       "scenario": "A deployment serves multiple senders behind one API key (e.g. a small team or a wrapper service). Sender A, knowing or capturing an envelope id belonging to Sender B, calls GET /api/envelopes/{B-id}/documents/{docId}/download and retrieves B's signed contract — there is no ownership check.",
       "recommendation": "Document explicitly that the current model is strictly single-tenant, and for multi-tenant use introduce per-principal API keys/JWTs plus an ownership check (envelope.senderEmail / owner id) in EnvelopeApp before returning or mutating an envelope."
     },
@@ -774,7 +774,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/server/src/app.ts:390",
+      "file": "packages/server/src/app.ts:390",
       "scenario": "Signer 1 of a sequential envelope POSTs /apply while SMTP is temporarily unavailable. State is saved (signer 1 signed, signer 2 marked notified), then the 'your_turn' email to signer 2 throws; the signer receives a 500 and signer 2 never gets a link. Envelope is permanently stuck until manual intervention.",
       "recommendation": "Make external effects best-effort and non-fatal to the transaction: catch per-effect send failures, log them, and record a durable 'pending notification' the operator can retry (outbox pattern), so a mail outage neither 500s a committed signature nor silently strands routing."
     },
@@ -785,7 +785,7 @@
       "severity": "low",
       "correctedSeverity": "low",
       "verdict": "unverified",
-      "file": "finesign/packages/server/src/http.ts:50",
+      "file": "packages/server/src/http.ts:50",
       "scenario": "Signer POSTs /sign/:token/apply with { signature: { kind:'typed', name:'x', font:'not-a-font' } }. Instead of a 400 VALIDATION_ERROR the request fails as a 500 INTERNAL (or renders with an unexpected font), depending on core's handling.",
       "recommendation": "Validate font against the finite set of supported signature fonts in parseSignature and throw ValidationError('signature.font is not a supported font') for anything else, mirroring the kind validation."
     }
@@ -795,7 +795,7 @@
       "id": "cert-winansi-completion-crash",
       "title": "Certificate-of-completion uses WinAnsi StandardFont on unsanitized user text, permanently wedging completion",
       "severity": "medium",
-      "file": "finesign/packages/server/src/certificate.ts:32",
+      "file": "packages/server/src/certificate.ts:32",
       "description": "buildCertificate embeds StandardFonts.Helvetica/HelveticaBold (WinAnsi/CP1252 encoding) and draws envelope title (line 37), recipient name+email (line 47), and decline reason (line 49) verbatim via page.drawText. pdf-lib throws `WinAnsi cannot encode ...` for any code point outside CP1252 (CJK, Cyrillic, Arabic, emoji, and common Latin letters such as U+0101 'ā', U+0219 'ș'). This runs inside EnvelopeApp.finalize() (app.ts:486), which executes BEFORE repo.save() in persistThenDeliver (app.ts:375-388). So when the last signer's applySignature triggers finalize, the throw aborts the whole operation: the just-applied signature is never persisted, no certificate is built, no seal is produced, and the signer receives a 500. On retry the same non-encodable character throws again, so the envelope is permanently stuck in 'sent' and can never complete or seal. This is not an attacker-only case: international sender/recipient names and titles are routine for an e-signature product.",
       "scenario": "Sender creates an envelope titled 'Contrat — Amélie Ástþórsdóttir' or adds recipient name '李伟' / email with an IDN local part, signers sign, and the final applySignature call reaches finalize() → buildCertificate → pdf-lib drawText throws 'WinAnsi cannot encode \"á\"' → 500 to the signer, signature not saved, envelope wedged at 'sent' forever.",
       "recommendation": "Sanitize/transliterate text to WinAnsi before drawText (strip or replace non-CP1252 code points), or embed a Unicode TTF via fontkit (pdf-lib registerFontkit + embedFont) for the certificate. At minimum, wrap finalize's certificate build so an encoding failure degrades gracefully instead of blocking completion, and validate title/name/email code points at authoring time."
@@ -804,7 +804,7 @@
       "id": "verify-no-ec-curve-floor",
       "title": "PAdES verifier enforces an RSA key-size floor but no EC curve strength floor",
       "severity": "low",
-      "file": "finesign/packages/pades/src/verify.ts:191",
+      "file": "packages/pades/src/verify.ts:191",
       "description": "verifyOne rejects weak digest OIDs, weak signature OIDs (MD5/SHA1), and RSA keys below MIN_RSA_BITS=2048. But the strength gate only runs for pub.asymmetricKeyType === 'rsa'. EC signer certificates get no curve check: a signature made with an undersized/legacy curve (e.g. secp192r1 / P-192, or a non-approved curve) passes verification and is reported with the same authority as a P-256/P-384 signature, as long as it chains/pins to the trust store. This is an incomplete implementation of the 'reject weak crypto' guarantee the module advertises (verify.ts:12) for the EC half of the 'works for RSA and EC' claim.",
       "scenario": "A signer/seal cert bearing a P-192 EC key produces an ECDSA-with-SHA256 signature; verifyOne skips the RSA-only bits check, sd.verify succeeds, and the verdict is trusted/valid — a ~96-bit-security signature accepted as strong.",
       "recommendation": "For EC keys, read the named curve from the SPKI and enforce an allow-list (e.g. P-256/P-384/P-521) or a minimum field size, mirroring the MIN_RSA_BITS gate; reject unknown/undersized curves with a problem message."
@@ -813,7 +813,7 @@
       "id": "prod-default-console-mailer",
       "title": "Production container defaults to ConsoleMailer, so signing links are never delivered",
       "severity": "low",
-      "file": "finesign/packages/server/src/container.ts:109",
+      "file": "packages/server/src/container.ts:109",
       "description": "buildProductionContainer sets `mailer: o.mailer ?? new ConsoleMailer(logger)`, and the direct boot path in index.ts constructs the production container passing only a logger override — so out of the box the production server uses ConsoleMailer. ConsoleMailer.send (mailer.ts:23) intentionally logs only metadata and never emits message.link (the bearer token). The result is a fail-open notification gap: a default self-hosted production boot issues valid signing tokens that reach no recipient, and the only way to surface them is FINESIGN_DEV_EXPOSE_TOKENS, which the code itself warns must never be enabled in production (app.ts:57-62). Operators get a silently non-functional signing flow with pressure to enable a dev-only token-exposure endpoint.",
       "scenario": "Operator runs `npm start` with FINESIGN_SENDER_API_KEY set but no SMTP wiring; envelope.send() succeeds and logs 'email sent hasLink:true', but no recipient ever receives a link — signing is impossible until either SMTP is wired or the dev token-exposure flag is turned on in production.",
       "recommendation": "In buildProductionContainer, when no SMTP/mailer is configured either refuse to boot (fail-closed) or emit a prominent startup warning that no real mailer is configured and signing links will not be delivered; do not silently default production to a no-delivery console mailer."
@@ -822,7 +822,7 @@
       "id": "no-signer-identity-capture",
       "title": "No IP / user-agent / signer-identity capture — required audit evidence is never recorded",
       "severity": "high",
-      "file": "finesign/packages/server/src/app.ts:298",
+      "file": "packages/server/src/app.ts:298",
       "description": "PRD FR-A1 promises every state change records 'actor, timestamp, IP, and user-agent where available', but no code path threads request metadata into the domain. The HTTP layer (getSession/apply/decline in http.ts) never reads req.ip or req.headers['user-agent'], and applySignature/markViewed/decline in app.ts pass only recipientId into audit events. The AuditEvent.data bag (domain/src/types.ts:93) is written with just {recipientId}. DocuSign's Certificate of Completion is legally load-bearing precisely because it pins each signer/view event to an IP and client fingerprint; without it FineSign's certificate is far weaker evidence of who actually signed. This is a data-integrity + legal-validity gap that also puts the shipped product out of conformance with its own PRD.",
       "scenario": "A signer opens their link and signs. The audit chain records recipient_viewed and recipient_signed with no IP or user-agent. If the signature is later disputed, the certificate cannot show where/how the signer acted — the very evidence DocuSign supplies is absent.",
       "recommendation": "Thread req.ip and user-agent from the Fastify routes into applySignature/markViewed/decline, persist them on the recipient (viewedIp/signedIp/userAgent) and inside the hashed audit event data, and render them in the Certificate of Completion's per-signer 'Signer Events' section."
@@ -831,7 +831,7 @@
       "id": "unsupported-field-kinds-silently-dropped",
       "title": "text / checkbox / initials fields are accepted, never collected, and silently dropped at completion",
       "severity": "high",
-      "file": "finesign/packages/domain/src/validation.ts:12",
+      "file": "packages/domain/src/validation.ts:12",
       "description": "FieldKind models signature, initials, date_signed, text, checkbox, but only signature/date are actually stampable — the rest are logged as 'skipped' in app.ts stamp() (app.ts:452). Crucially: (1) validateForSend does NOT reject an envelope containing text/checkbox/initials fields; (2) the signer submit path only carries a SignatureInput (http.ts parseSignature) — there is no channel for a signer to enter a text value or tick a checkbox, and Field.value is never populated by any code; (3) applySignature marks the recipient signed and can complete the envelope regardless. So an envelope authored with a required text/initials/checkbox field will send, be 'signed', and reach completed with that required data never captured — no error, just a warn log. That is silent data loss on a legal document and a core DocuSign-parity gap.",
       "scenario": "Sender adds a required 'text' field (e.g. title/date-of-birth) and a signature field for a signer, then sends. Signer draws a signature and hits sign-all. Envelope completes; the text field is never filled, never stamped, and the certificate/signed PDF omit it — with no indication anything was missed.",
       "recommendation": "Either (a) reject at validateForSend any field whose kind isn't end-to-end supported, or (b) extend the signer submit payload and stamping to collect+render text/checkbox/initials and enforce that all required fields are completed before allowing recipient_signed. File the chosen scope in the backlog explicitly."
@@ -840,7 +840,7 @@
       "id": "no-esign-consent-disclosure",
       "title": "No ESIGN/UETA electronic-records consent disclosure or consent capture",
       "severity": "high",
-      "file": "finesign/packages/server/src/app.ts:247",
+      "file": "packages/server/src/app.ts:247",
       "description": "US ESIGN / UETA (and eIDAS for the EU) require that before signing electronically a signer is shown an electronic-record & signature disclosure and affirmatively consents, and that this consent is recorded. FineSign's getSession returns documents+fields and lets the signer apply a signature immediately; there is no disclosure step, no consent checkbox, and no audit event type for consent (AuditEventType in domain/src/types.ts:78 has no 'consent_given'). This is a foundational legal-validity feature DocuSign/Adobe Sign both implement and gate signing on. It is not listed in the PRD non-goals or the backlog.",
       "scenario": "A signer completes an agreement without ever being presented an electronic-signature disclosure or recording consent to transact electronically; a counterparty later challenges enforceability on ESIGN-consent grounds and the audit trail has nothing to point to.",
       "recommendation": "Add a consent gate to the signing session (disclosure text + explicit 'I agree to use electronic records and signatures'), record a hash-chained consent_given audit event with IP/timestamp, and surface it on the certificate. Make the disclosure configurable for self-hosters."
@@ -849,7 +849,7 @@
       "id": "no-reminders-or-envelope-expiration",
       "title": "No automatic reminders, envelope expiration, or scheduler",
       "severity": "high",
-      "file": "finesign/packages/domain/src/types.ts:106",
+      "file": "packages/domain/src/types.ts:106",
       "description": "The Envelope model has createdAt/sentAt/completedAt but no expiresAt and no reminder policy; AppConfig only carries a per-token tokenTtlMs. There is no scheduler/cron anywhere in the server to (a) re-notify a pending signer after N days, or (b) auto-void an envelope that has been outstanding too long. Automatic reminders and envelope expiration are standard, heavily-used DocuSign features and matter operationally (stalled envelopes never resolve) and for legal hygiene (offers that expire). Token TTL alone means links quietly die with no nudge and no sender visibility. Not captured in backlog or non-goals.",
       "scenario": "Sender routes a 3-signer sequential envelope; signer 2 ignores the email. The link eventually expires (TOKEN_EXPIRED), no reminder was ever sent, no expiration event fired, and the envelope sits in 'sent' forever with the sender unaware it is stuck.",
       "recommendation": "Add envelope expiration (expiresAt → auto-void with audit event) and a reminder cadence, driven by an injected scheduler port so self-hosters can back it with cron/a worker; emit audit events and sender notifications for both."
@@ -858,7 +858,7 @@
       "id": "recipients-cannot-retrieve-completed-copy",
       "title": "Completed-copy notification gives signers/CC no way to actually obtain the signed document",
       "severity": "high",
-      "file": "finesign/packages/server/src/app.ts:322",
+      "file": "packages/server/src/app.ts:322",
       "description": "On completion the domain emits a 'completed_copy' notify to every recipient (envelope-service.ts:327) and the email says 'a signed copy is available' — but the notify carries no token, and the signer's original token no longer works: getSession throws ENVELOPE_NOT_SENT once status !== 'sent' (app.ts:249), and getSessionDocument/download are the only retrieval paths (the latter gated by the sender API key). So signers and CC recipients are told a copy exists but have no authenticated way to download it; only the sender (API key holder) can. DocuSign emails each party the final PDF or a working retrieval link. This breaks the 'deliver the completed copy to everyone' promise (ARCHITECTURE.md) and is a real delivery/UX-for-legal-validity gap.",
       "scenario": "A two-signer envelope completes. Both signers and a CC recipient receive 'Completed: … a signed copy is available', click their old link, and get a 409/expired error. None of them can obtain their legally-signed copy without contacting the sender.",
       "recommendation": "Either attach the completed PDF/certificate to the completion email or issue a post-completion download token (or keep the signer token valid read-only after completion) so every recipient can retrieve their signed copy."
@@ -867,7 +867,7 @@
       "id": "no-webhooks-event-callbacks",
       "title": "No webhooks / event callbacks for integrators (DocuSign Connect parity)",
       "severity": "medium",
-      "file": "finesign/packages/server/src/http.ts:55",
+      "file": "packages/server/src/http.ts:55",
       "description": "Integrating systems can only learn envelope status by polling GET /api/envelopes. There is no outbound webhook/event-callback mechanism to push sent/viewed/signed/completed/declined/voided events to a subscriber URL. DocuSign Connect is central to how the platform is embedded in other products (the PRD explicitly targets 'Developers … integrate signing into their own product'). The deferred M5.4 item is about in-UI websockets, which is a different concern; server-to-server webhooks are not captured anywhere.",
       "scenario": "A self-hoster wants their CRM to mark a deal 'signed' the moment the envelope completes. Their only option is to poll the API on a timer, adding latency and load and missing the point-in-time event context.",
       "recommendation": "Add a webhook subscription model (per-envelope or global endpoint + shared secret/HMAC signing) that fires on each audit event, with delivery retries and a dead-letter path. The audit event stream is already the natural source."
@@ -876,7 +876,7 @@
       "id": "notify-failure-loses-signing-link",
       "title": "Notification delivery has no retry/queue — a failed send after state advance strands the envelope",
       "severity": "medium",
-      "file": "finesign/packages/server/src/app.ts:389",
+      "file": "packages/server/src/app.ts:389",
       "description": "persistThenDeliver saves state, then fires notify effects with a single awaited mailer.send and no retry, queue, or dead-letter. If SMTP is momentarily down, the send throws, the request 500s, but the envelope has already durably advanced to 'sent'/next-recipient-notified with a token issued. The signer never receives the link, and nothing retries it — the envelope is silently stuck with no operator signal. There is also no bounce handling, so a mistyped/bouncing recipient email is invisible to the sender. For a platform whose entire flow hinges on email delivery this is a material operational-reliability gap.",
       "scenario": "Sender sends an envelope; the SMTP host rate-limits for 30s. mailer.send throws, the caller gets a 500, but the envelope is already 'sent' and the recipient 'notified' in the DB. No email went out and no retry occurs; the signer waits forever.",
       "recommendation": "Move notifications behind a durable outbox/queue with retries and a dead-letter, decoupled from the request lifecycle, and surface delivery/bounce failures back to the sender (bounce webhook or status)."
@@ -885,7 +885,7 @@
       "id": "no-retention-erasure-data-protection",
       "title": "No data-retention policy, purge, or GDPR/CCPA data-subject erasure/export",
       "severity": "medium",
-      "file": "finesign/packages/server/src/app.ts:106",
+      "file": "packages/server/src/app.ts:106",
       "description": "FineSign stores signed agreements plus PII (recipient names, emails, and — once fixed — IPs) indefinitely with no retention window, no purge/expiry of documents and blobs, and no data-subject export or erasure workflow. There is no API to delete an envelope or scrub a person's data, and no legal-hold concept. Any production platform handling agreements + PII in the EU/California needs configurable retention and a Right-to-Erasure path; the append-only hash-chained audit also needs a defined redaction/tombstone story so erasure doesn't silently break chain verification. Not in the backlog or non-goals.",
       "scenario": "A signer invokes GDPR Art. 17 erasure. The operator has no supported way to remove that person's name/email/IP and their document from FineSign, and ad-hoc deletion would break the audit hash chain and certificate hashes.",
       "recommendation": "Define a retention/purge policy (configurable TTL per envelope), an erasure/export workflow, and a legal-hold flag; specify how erasure interacts with the immutable audit chain (e.g. tombstoning PII while preserving chain integrity)."
@@ -894,7 +894,7 @@
       "id": "no-encryption-at-rest",
       "title": "Documents and PII stored unencrypted at rest by the reference adapters",
       "severity": "medium",
-      "file": "finesign/packages/server/src/app.ts:173",
+      "file": "packages/server/src/app.ts:173",
       "description": "Uploaded originals, normalized PDFs, signed copies, and certificates are written to the BlobStore as plaintext (blobs.put), and the SQLite/Postgres repos store recipient PII in the clear. The self-host default (SQLite + local-FS blob store, NFR-1) therefore keeps highly sensitive legal documents and personal data unprotected on disk. DocuSign/Adobe Sign encrypt documents at rest as a baseline. There is no envelope-encryption or KMS seam in the BlobStore port. The prior security reviews covered transport/authz/token handling but never at-rest confidentiality.",
       "scenario": "An attacker who gains read access to the server's data directory (backup leak, stolen disk, misconfigured volume) can read every signed contract and all signer PII directly, with no key barrier.",
       "recommendation": "Add an at-rest encryption seam (envelope encryption via an injected key provider / KMS, or filesystem/DB-level encryption guidance) and document the self-host expectation; at minimum encrypt document blobs and treat the key as a required secret."
@@ -912,7 +912,7 @@
       "id": "shallow-health-no-observability",
       "title": "Shallow /health, no readiness/dependency checks, no metrics or tracing",
       "severity": "medium",
-      "file": "finesign/packages/server/src/http.ts:126",
+      "file": "packages/server/src/http.ts:126",
       "description": "/health returns a static {status:'ok'} without probing the DB, blob store, or mailer, so an orchestrator will route traffic to an instance whose database or storage is down. There is no readiness vs liveness split, no metrics endpoint (envelope throughput, signing latency, notify failures), and no tracing/structured operational alerting. For a production platform expected to meet an SLA and be on-called, this observability floor is missing and is not tracked in the backlog.",
       "scenario": "The Postgres connection dies but the process stays up. /health keeps returning ok, the load balancer keeps sending traffic, every request 500s, and there is no metric or alert distinguishing this from normal operation.",
       "recommendation": "Add a readiness check that pings repo/blob/mailer dependencies, split liveness/readiness, and expose Prometheus-style metrics plus structured error counters for the key flows (send, sign, notify, seal)."
@@ -921,7 +921,7 @@
       "id": "no-malware-scanning",
       "title": "Uploaded (and redistributed) documents are not malware-scanned",
       "severity": "low",
-      "file": "finesign/packages/server/src/app.ts:518",
+      "file": "packages/server/src/app.ts:518",
       "description": "Uploads are validated only by magic bytes + size (assertMagic). The resulting PDFs/DOCX are stored and then downloaded by other recipients and the sender, so a malicious PDF (embedded JS, exploit payload) uploaded by one party is redistributed by the platform to others. The backlog's X.7 sandbox item concerns only the LibreOffice conversion process, not anti-malware scanning of the stored, re-served files. DocuSign scans uploaded content; a production self-host story should at least offer a scanning seam.",
       "scenario": "A sender uploads a booby-trapped PDF; FineSign normalizes and serves it to the signer, who downloads and opens it in a vulnerable reader — the platform acted as the malware distribution channel.",
       "recommendation": "Add an optional anti-malware scanning port (e.g. ClamAV/ICAP) invoked on upload before a document is made available for signing or download, and document it for self-hosters."

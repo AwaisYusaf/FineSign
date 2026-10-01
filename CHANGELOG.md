@@ -195,8 +195,8 @@ at each step:
 _Levels B-T / B-LT / B-LTA, per-signer certs, and Adobe/EU-DSS conformance are
 staged follow-ons (backlog M6.2)._
 
-### Critical review (multi-agent, Fable 5) + hardening
-Ran a 60-agent adversarial review across every critical module + a DocuSign
+### Critical review + hardening
+Ran an adversarial review across every critical module + a DocuSign
 parity analysis (`docs/review/critical-review.md`, `docs/DOCUSIGN-PARITY.md`);
 38 findings confirmed by independent verification. Fixed the confirmed
 correctness/security issues, each with a regression test:
@@ -244,8 +244,8 @@ expiry. Designed from a code-level blueprint verified against the installed PKIj
   `openssl ts -verify -data <signature>` (token) both succeed; `openssl ts -reply`
   prints the correct `genTime` and a minimal DER serial.
 
-### PAdES-B-T adversarial self-critique (multi-agent, Fable 5) + fixes
-A 5-lens / 14-agent adversarial review (`docs/review/pades-bt.md`) with independent
+### PAdES-B-T adversarial self-critique + fixes
+An adversarial review (`docs/review/pades-bt.md`) with independent
 per-finding verification surfaced 9 confirmed defects; all fixed, each with a
 regression test:
 - **Forged-seal (CRITICAL)**: `findSignerCert` fell back to `certificates[0]` for a
@@ -293,8 +293,8 @@ offline, after the signing certs expire. Designed from a code-level blueprint
 - **Independently validated with OpenSSL**: `crl -verify` (DSS CRL) and
   `ts -verify -data <byterange>` (document timestamp) both succeed.
 
-### PAdES-B-LT/LTA adversarial self-critique (multi-agent, Fable 5) + fixes
-A 5-lens / 16-agent adversarial review (`docs/review/pades-ltlta.md`) with
+### PAdES-B-LT/LTA adversarial self-critique + fixes
+An adversarial review (`docs/review/pades-ltlta.md`) with
 independent per-finding verification confirmed 9 defects; 8 fixed with regression
 tests, 1 deferred (documented):
 - **Forged-seal (CRITICAL)**: a trusted *document timestamp* satisfied the
@@ -376,7 +376,7 @@ subscriptions as durable outbox rows, drained by a retrying deliverer.
   mapped/compatible/NAT64/6to4); redirects are not followed; `allowPrivate` is a
   dev-only opt-in. **Secret hygiene**: returned once on creation, redacted from all
   other reads.
-- **Adversarial review** (`docs/review/dg4-webhooks.md`, 5 lenses / 12 agents,
+- **Adversarial review** (`docs/review/dg4-webhooks.md`,
   6 confirmed findings) fixed a HIGH concurrent-drain double-delivery + attempts-
   race (now atomic lease + re-entrancy guard), an `isPublicIp` fail-open on
   IPv4-compatible/6to4 embeddings, and a per-POST signature-timestamp bug; plus a
@@ -396,7 +396,7 @@ in the clear.
 - **KMS-ready `KeyProvider` port**; `LocalKeyProvider` keyring with per-blob key ids
   derived from key material (SHA-256 prefix) + **rotation** (`FINESIGN_ENCRYPTION_KEY`
   active + `FINESIGN_ENCRYPTION_DECRYPT_KEYS` retired). Fail-closed reads by default.
-- **Adversarial review** (`docs/review/dg5-encryption.md`, 3 lenses / 12 agents,
+- **Adversarial review** (`docs/review/dg5-encryption.md`,
   8 confirmed) flipped the legacy-plaintext passthrough to fail-closed (was a
   write-attacker tamper-detection bypass; migration is now an explicit env opt-in),
   bound the storage key into the AAD, and added a boot warning when encryption is
