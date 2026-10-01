@@ -9,8 +9,8 @@
  *                           `rotate` — what `page.drawText/drawImage` consume.
  *
  * All functions here are PURE (no I/O). Every rotation branch (0/90/180/270) is
- * derived so the transforms are exact inverses of one another; the app this was
- * extracted from proves the round-trips with a 4-corner test.
+ * derived so the transforms are exact inverses of one another;
+ * `test/geometry.test.ts` proves the round-trips at every rotation.
  *
  * `rotation` is a page's `/Rotate` in degrees (any integer; normalised here).
  */
@@ -28,7 +28,7 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 /**
  * A single POINT (a placement anchor), display-space fractions → raw PDF
  * user-space coordinates (bottom-left origin, y-up), accounting for `/Rotate`.
- * Used to place typed-name text. Mirrors the app's `toPageCoords`.
+ * Used to place typed-name text.
  */
 export function toPageCoords(
   xPercent: number,

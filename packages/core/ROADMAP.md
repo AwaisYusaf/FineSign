@@ -15,8 +15,8 @@ keeps it dependency-free.
 
 ## Near term — hardening the engine
 
-- [ ] **Richer field detection.** Port the source platform's AI signer-field
-      classifier as an *optional* `@finesign/detect-ai` add-on (bring-your-own LLM
+- [ ] **Richer field detection.** An AI signer-field classifier as an
+      *optional* `@finesign/detect-ai` add-on (bring-your-own LLM
       client) for forms whose fields are unnamed or whose signature is a bare
       line, not a widget. Keep the core AI-free.
 - [ ] **Vision/OCR anchor fallback** for flat (scanned) PDFs with no AcroForm.
@@ -35,8 +35,8 @@ These are new packages that consume the engine; the engine stays pure.
 - [ ] **Signing sessions** — tokenized, expiring per-recipient links (the public
       "you've been asked to sign" page), one recipient can't see another's link.
 - [ ] **Storage & delivery adapters** — thin interfaces (`StorageAdapter`,
-      `MailAdapter`) with reference S3 + SES/SMTP implementations, so the app
-      shell that was stripped out ships as opt-in adapters.
+      `MailAdapter`) with reference S3 + SES/SMTP implementations, so
+      persistence and delivery ship as opt-in adapters.
 - [ ] **Reference server** — a small Fastify/Express app wiring engine + adapters
       into a REST API (create envelope, add recipients, send, sign, download).
 - [ ] **Signer web UI** — a minimal React page: render PDF, draw/type/upload a

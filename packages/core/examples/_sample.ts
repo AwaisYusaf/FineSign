@@ -6,11 +6,11 @@ export async function makeDemoForm(): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]);
   const font = await doc.embedFont("Helvetica");
-  page.drawText("CLAIM FOR DISABILITY — DEMO FORM", { x: 72, y: 720, size: 16, font });
+  page.drawText("SAMPLE AGREEMENT — DEMO FORM", { x: 72, y: 720, size: 16, font });
   page.drawText("Sign and date below:", { x: 72, y: 180, size: 11, font });
 
   const form = doc.getForm();
-  form.createTextField("veteran_signature").addToPage(page, {
+  form.createTextField("signer_signature").addToPage(page, {
     x: 72,
     y: 120,
     width: 260,

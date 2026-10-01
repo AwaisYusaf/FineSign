@@ -99,13 +99,12 @@ path uses — so detection and stamping can't drift.
 
 **Limitation:** this only sees real AcroForm fields. Flat scans, or signature
 *lines* with no underlying field, yield nothing — detect those upstream (OCR /
-vision) and pass anchors in via `anchorFromDisplayBox`. Porting the source
-platform's AI signer-field classifier is the intended richer detector (see the
-roadmap).
+vision) and pass anchors in via `anchorFromDisplayBox`. An optional AI
+signer-field classifier is the intended richer detector (see the roadmap).
 
-## Design constraints (kept from the source platform)
+## Design constraints
 
-- **No document-type coupling.** The engine never asks "is this a claim form?".
+- **No document-type coupling.** The engine never asks "is this a tax form?".
   It only asks "is this a PDF, and where are the anchors?". Policy about *who*
   signs *what* lives in your app.
 - **Overlay, not PKI.** Marks are drawn on the page. This is visually identical

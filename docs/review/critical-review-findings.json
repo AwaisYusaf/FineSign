@@ -236,7 +236,7 @@
       "correctedSeverity": "high",
       "verdict": "confirmed",
       "file": "finesign/packages/core/src/engine/stamp.ts:42",
-      "scenario": "Load a PDF whose page MediaBox is [100 100 700 900] (600x800 visible, origin offset by 100,100 — common for cropped scans/government forms). In the web UI (or any renderer that shows the cropped/visible page), a signer draws a signature box at the visible top-left; this becomes a DisplayBox ~ {x:0, y:0, width:0.3, height:0.05}. anchorFromDisplayBox accepts it (drawnBoxError passes since it is on-page in fraction terms) with source 'manual'. During signing, stampImageAnchor calls displayBoxToPageRect with rawW=600, rawH=800 (getSize, origin discarded); for rotation 0 the box maps to user-space rawXmin=0, rawYmin=800-h. pdf-lib draws the image at absolute user-space x=0, y~760. But the visible page occupies user-space x in [100,700], y in [100,900], so the mark is placed 100 units left of the visible left edge (clipped off-page) and 100 units below the visible top edge — the signature lands off/mislocated relative to where the signer drew it. The auto-detect+stamp path masks this because its equal-and-opposite offset cancels, so the bug only surfaces for manually/UI-placed boxes or when CropBox differs from MediaBox.",
+      "scenario": "Load a PDF whose page MediaBox is [100 100 700 900] (600x800 visible, origin offset by 100,100 — common for cropped scans). In the web UI (or any renderer that shows the cropped/visible page), a signer draws a signature box at the visible top-left; this becomes a DisplayBox ~ {x:0, y:0, width:0.3, height:0.05}. anchorFromDisplayBox accepts it (drawnBoxError passes since it is on-page in fraction terms) with source 'manual'. During signing, stampImageAnchor calls displayBoxToPageRect with rawW=600, rawH=800 (getSize, origin discarded); for rotation 0 the box maps to user-space rawXmin=0, rawYmin=800-h. pdf-lib draws the image at absolute user-space x=0, y~760. But the visible page occupies user-space x in [100,700], y in [100,900], so the mark is placed 100 units left of the visible left edge (clipped off-page) and 100 units below the visible top edge — the signature lands off/mislocated relative to where the signer drew it. The auto-detect+stamp path masks this because its equal-and-opposite offset cancels, so the bug only surfaces for manually/UI-placed boxes or when CropBox differs from MediaBox.",
       "recommendation": "Read page.getMediaBox() { x, y } (and ideally getCropBox()) and offset accordingly: in stamping add the origin (absoluteX += box.x, absoluteY += box.y) to every drawn x/y; in detect/acroform-fields.ts subtract the origin (x: xMin - box.x, y: (box.y + box.height) - yMax). Decide explicitly whether display space is the CropBox or MediaBox and use that box consistently on both the detect and stamp sides."
     },
     {
@@ -258,7 +258,7 @@
       "correctedSeverity": "medium",
       "verdict": "confirmed",
       "file": "finesign/packages/core/src/engine/dates.ts:22",
-      "scenario": "Server process runs in America/Los_Angeles (UTC-7 in July). A date anchor is stamped at instant 2026-07-11T05:00:00Z, which is 2026-07-10 22:00 local. now.getFullYear()/getMonth()/getDate() return 2026/6/10, so the visible stamp reads 07/10/2026. The audit StampedAnchor.signedAt = now.toISOString() = \"2026-07-11T05:00:00.000Z\". The document shows a signing date of July 10 while the machine audit records July 11 — a contradictory signing date on a VA claim. The reverse occurs in eastern zones just after local midnight when UTC is still the previous day.",
+      "scenario": "Server process runs in America/Los_Angeles (UTC-7 in July). A date anchor is stamped at instant 2026-07-11T05:00:00Z, which is 2026-07-10 22:00 local. now.getFullYear()/getMonth()/getDate() return 2026/6/10, so the visible stamp reads 07/10/2026. The audit StampedAnchor.signedAt = now.toISOString() = \"2026-07-11T05:00:00.000Z\". The document shows a signing date of July 10 while the machine audit records July 11 — a contradictory signing date on the signed document. The reverse occurs in eastern zones just after local midnight when UTC is still the previous day.",
       "recommendation": "Pick one timezone convention and apply it to both the stamped text and the audit timestamp — e.g. derive MM/DD/YYYY from UTC (getUTCMonth/getUTCDate/getUTCFullYear) to match toISOString(), or make the timezone an explicit engine option. Document the choice."
     },
     {
@@ -1172,7 +1172,7 @@
           "finesign_status": "missing",
           "importance": "high",
           "notes": "The only validation is geometric: drawnBoxError checks the box is on-page with positive area (envelope-service.ts:196-202) and page bounds in validation.ts. Field has no type/mask/regex/min-max attributes (types.ts:63-76). No format enforcement on any input.",
-          "recommendation": "Add validation metadata to text fields (regex/mask/required-length) and enforce both client- and server-side. Important for SSN/date/ZIP fields in the VA use case."
+          "recommendation": "Add validation metadata to text fields (regex/mask/required-length) and enforce both client- and server-side. Important for SSN/date/ZIP fields."
         },
         {
           "capability": "Mobile / touch signing",

@@ -13,10 +13,9 @@ already works. If a rule here conflicts with convenience, the rule wins.
 
 ## 1. Non-negotiables (the hard rules)
 
-1. **Isolation.** All work lives under `finesign/` (git-ignored). The parent app
-   (`va-claim-backend`) is never imported, modified, or depended on. No file
-   outside `finesign/` is edited except this one boundary already set in the
-   root `.gitignore`.
+1. **Isolation.** All work lives in this repository. FineSign never imports,
+   modifies, or depends on code outside it, and nothing here names or describes
+   another organization's systems.
 2. **The gate is law.** No task is "done" until `scripts/gate.sh` passes:
    typecheck + lint + unit tests + build, across every affected package, with
    zero errors and zero warnings. Red gate = not done. No exceptions, no

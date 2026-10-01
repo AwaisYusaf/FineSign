@@ -103,14 +103,14 @@ export interface SignatureAnchor extends DisplayBox {
   page: number;
   /** Signature mark, or the date that pairs with it. */
   kind: SignatureFieldKind;
-  /** Human/audit label, e.g. "claimant_signature". Not parsed by the engine. */
+  /** Human/audit label, e.g. "signer_signature". Not parsed by the engine. */
   label: string;
   /** Where this anchor came from — audit only. */
   source: "auto" | "manual" | "acroform";
   /** For `date` anchors only: how to fill the date.
    *  - "auto" (default): infer from the label + same-page grouping — a group of
    *    exactly 3 unlabeled date boxes is treated as split MM / DD / YYYY cells
-   *    (matches split-field government forms).
+   *    (matches forms that split the date into separate cells).
    *  - "full": always stamp the complete MM/DD/YYYY. Use when each date field is
    *    an independent full date (never a split cell), so three on one page don't
    *    get fragmented. */

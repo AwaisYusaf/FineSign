@@ -15,7 +15,7 @@ async function main() {
 
   const signed = await engine.signWithTypedNames(pdf, [
     {
-      signatureName: "Jane Q. Veteran",
+      signatureName: "Jane Q. Public",
       signatureFont: "great_vibes", // dancing_script | great_vibes | pacifico | pinyon_script
       pageNumber: 1,
       // Display-space fractions (top-left origin) — same coords a browser overlay uses.

@@ -5,9 +5,8 @@
  *
  * These are heuristics, not a controlled vocabulary — they will occasionally
  * miss (e.g. "i_certify") or over-match. Treat their output as a strong default
- * a human can correct, not gospel. For the VA use-case the "signer" is the party
- * filing their own claim (veteran / claimant / appellant); tune the deny list
- * for your own domain.
+ * a human can correct, not gospel. The "signer" is the party completing the
+ * form for themselves; tune the deny list for your own domain.
  */
 
 /** Parties who are NOT the primary signer — their signature fields are excluded. */

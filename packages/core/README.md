@@ -10,9 +10,7 @@ fields so nothing paints over the signature, and returns the signed PDF bytes.
 It is **bytes-in, bytes-out**. finesign-core does **not** talk to a database, a storage
 bucket, an auth system, or the network. That is deliberate — persistence and
 identity are your app's concern, and keeping them out is what makes this engine
-drop into any stack. (It was extracted from a production VA-disability-claims
-platform that signs real government forms; the app-specific S3/Postgres/auth
-shell was left behind.)
+drop into any stack.
 
 > **Name is a placeholder.** `finesign-core` is a working title — rename freely before
 > you publish.
@@ -61,7 +59,7 @@ Requires Node 18+.
 import { SignEngine, detectAnchorsFromAcroForm } from "finesign-core";
 import fs from "fs";
 
-const pdf = fs.readFileSync("claim-form.pdf");
+const pdf = fs.readFileSync("agreement.pdf");
 
 // 1. Find where to sign (straight from the PDF's form fields).
 const anchors = await detectAnchorsFromAcroForm(pdf);
@@ -74,7 +72,7 @@ const { pdf: signed, signatureCount, dateCount } = await engine.signWithImage(
   signatureDataUrl, // "data:image/png;base64,..." from a canvas or upload
 );
 
-fs.writeFileSync("claim-form.signed.pdf", signed);
+fs.writeFileSync("agreement.signed.pdf", signed);
 console.log(`stamped ${signatureCount} signatures, ${dateCount} dates`);
 ```
 
@@ -86,7 +84,7 @@ import { SignEngine } from "finesign-core";
 const engine = new SignEngine();
 const signed = await engine.signWithTypedNames(pdf, [
   {
-    signatureName: "Jane Q. Veteran",
+    signatureName: "Jane Q. Public",
     signatureFont: "great_vibes",
     pageNumber: 1,
     xPercent: 0.12, // display-space fractions (top-left origin) — what a

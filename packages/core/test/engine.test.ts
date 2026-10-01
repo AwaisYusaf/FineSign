@@ -19,7 +19,7 @@ async function makeFormPdf(): Promise<Uint8Array> {
   const page = doc.addPage([612, 792]);
   const form = doc.getForm();
 
-  const sig = form.createTextField("veteran_signature");
+  const sig = form.createTextField("signer_signature");
   sig.addToPage(page, { x: 72, y: 120, width: 240, height: 28 });
 
   const date = form.createTextField("date_signed");
@@ -51,9 +51,9 @@ test("detectFields + detectAnchorsFromAcroForm find the named fields", async () 
   const pdf = await makeFormPdf();
   const fields = await detectFields(pdf);
   const names = fields.map((f) => f.name).sort();
-  assert.deepEqual(names, ["date_signed", "veteran_signature"]);
+  assert.deepEqual(names, ["date_signed", "signer_signature"]);
   assert.equal(fields.find((f) => f.name === "date_signed")!.kind, "date");
-  assert.equal(fields.find((f) => f.name === "veteran_signature")!.kind, "signature");
+  assert.equal(fields.find((f) => f.name === "signer_signature")!.kind, "signature");
 
   const anchors = await detectAnchorsFromAcroForm(pdf);
   assert.equal(anchors.length, 2);
@@ -87,7 +87,7 @@ test("signWithTypedNames renders a scripted name onto the page", async () => {
   const engine = new SignEngine();
   const signed = await engine.signWithTypedNames(pdf, [
     {
-      signatureName: "Jane Q. Veteran",
+      signatureName: "Jane Q. Public",
       signatureFont: "great_vibes",
       pageNumber: 1,
       xPercent: 0.12,
@@ -179,7 +179,7 @@ function dummyAnchor(): SignatureAnchor {
     width: 0.3,
     height: 0.05,
     kind: "signature",
-    label: "veteran_signature",
+    label: "signer_signature",
     source: "manual",
   };
 }

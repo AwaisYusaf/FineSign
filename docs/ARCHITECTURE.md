@@ -5,7 +5,7 @@
 ```
 finesign/
   packages/
-    core/       finesign-core      Pure PDF signing engine (extracted, standalone OSS)
+    core/       finesign-core      Pure PDF signing engine (standalone OSS)
     shared/     @finesign/shared   Tiny cross-cutting primitives: Result, errors, ids, Clock
     domain/     @finesign/domain   Pure agreement model: entities, status machine, audit, ports
     storage/    @finesign/storage  Adapter impls of domain ports: in-memory + SQLite + blob store

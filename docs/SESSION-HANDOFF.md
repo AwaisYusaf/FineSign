@@ -23,11 +23,6 @@ It is a **TypeScript npm-workspaces monorepo** (strict TS, no `any`) with a pure
 domain core, a Fastify REST API, and a React (JS) web UI. Built on **`finesign-core`**,
 a standalone PDF signing engine.
 
-> **Historical note:** FineSign began life inside another repo (a VA-claims backend)
-> as a git-ignored `/finesign/` folder so it never affected the parent app. Once
-> copied out into its own repo, that constraint no longer applies — it is now a
-> standalone project. (The `.gitignore` here is FineSign's own.)
-
 ---
 
 ## 2. Current status at a glance

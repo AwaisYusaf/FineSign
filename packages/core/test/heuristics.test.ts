@@ -8,7 +8,7 @@ import {
 } from "../src/detect/field-heuristics";
 
 test("hasSignToken matches whole tokens, not substrings", () => {
-  assert.ok(hasSignToken("veteran_signature"));
+  assert.ok(hasSignToken("signer_signature"));
   assert.ok(hasSignToken("signed"));
   assert.ok(hasSignToken("date_signed"));
   assert.ok(!hasSignToken("assignment")); // not as·sign·ment
@@ -17,9 +17,9 @@ test("hasSignToken matches whole tokens, not substrings", () => {
 });
 
 test("isSignerSignatureField accepts signer, rejects date and non-signer", () => {
-  assert.ok(isSignerSignatureField("claimant_signature"));
-  assert.ok(isSignerSignatureField("veteran_signature"));
-  assert.ok(isSignerSignatureField("appellant_signature"));
+  assert.ok(isSignerSignatureField("applicant_signature"));
+  assert.ok(isSignerSignatureField("signer_signature"));
+  assert.ok(isSignerSignatureField("tenant_signature"));
   assert.ok(!isSignerSignatureField("signature_date")); // date precedence
   assert.ok(!isSignerSignatureField("witness_signature"));
   assert.ok(!isSignerSignatureField("representative_signature"));
@@ -37,5 +37,5 @@ test("isNonSignerParty flags other parties", () => {
   assert.ok(isNonSignerParty("witness_signature"));
   assert.ok(isNonSignerParty("authorized_representative_signature"));
   assert.ok(isNonSignerParty("notary_public"));
-  assert.ok(!isNonSignerParty("veteran_signature"));
+  assert.ok(!isNonSignerParty("signer_signature"));
 });

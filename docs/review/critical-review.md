@@ -92,7 +92,7 @@ When a `full` date anchor sorts among three auto date boxes, the `[MM,DD,YYYY]` 
 *Fix:* Build the auto-only ordered list first and index `[MM,DD,YYYY]` by `autos.indexOf(a)`.
 
 **[MEDIUM] Stamped date uses server local time; audit timestamp uses UTC** — `packages/core/src/engine/dates.ts:22`
-Near midnight the visible date and the audit `signedAt` (`toISOString()`) disagree by a day — a contradictory signing date on a VA claim.
+Near midnight the visible date and the audit `signedAt` (`toISOString()`) disagree by a day — a contradictory signing date on the signed document.
 *Fix:* Use one convention for both (e.g. UTC getters to match `toISOString()`), or make timezone an explicit option.
 
 #### UNCERTAIN (unverified)
@@ -365,7 +365,7 @@ Legend — Status: ✅ have · ◑ partial · ❌ missing. Importance: 🔴 crit
 | Auto field placement (detect) | ◑ | 🟠 | Wire existing `detectAnchorsFromAcroForm` into Create; add OCR for flat PDFs |
 | Anchor/text-tag placement | ◑ | 🟡 | Add page-text keyword anchor scanning |
 | Conditional / dependent fields | ❌ | 🟡 | Add show-if rules once checkbox/radio/dropdown exist |
-| Field format validation (masks/regex) | ❌ | 🟠 | Add validation metadata + client/server enforcement (SSN/date/ZIP for VA) |
+| Field format validation (masks/regex) | ❌ | 🟠 | Add validation metadata + client/server enforcement (SSN/date/ZIP) |
 | Mobile / touch signing | ◑ | 🟠 | Make PdfView responsive (fluid/zoom/fit-to-width) |
 | Drag-to-place fields | ◑ | 🟠 | Add drag-to-draw sizing |
 | Edit/move/resize/delete placed fields | ❌ | 🟠 | Add select/move/resize/delete + update/deleteField API |
@@ -456,7 +456,7 @@ Legend — Status: ✅ have · ◑ partial · ❌ missing. Importance: 🔴 crit
 9. **Make send/notify recoverable:** resend/re-notify endpoint + retried outbox — `server/src/app.ts:222/389`. *[MEDIUM, else envelopes permanently stuck]*
 10. **Restrict decline notifications** to sender + engaged recipients; sanitize reason — `domain/src/envelope-service.ts:362`. *[MEDIUM, info leak]*
 11. **Atomic blob writes** (temp+rename) and **`exists()` errno handling** — `storage/src/blob-store.ts:41-46`, `:62-69`. *[MEDIUM]*
-12. **MediaBox/CropBox origin + date correctness** (UTC/local, split-date index) — `core/src/engine/stamp.ts:42`, `dates.ts:22`, `dates.ts:48`. *[HIGH/MEDIUM, mislocated stamps / wrong dates on VA claims]*
+12. **MediaBox/CropBox origin + date correctness** (UTC/local, split-date index) — `core/src/engine/stamp.ts:42`, `dates.ts:22`, `dates.ts:48`. *[HIGH/MEDIUM, mislocated stamps / wrong signing dates]*
 13. **Rate-limit + input hardening:** set `trustProxy` + per-recipient cap (`http.ts:56`); validate/clamp list limit/offset (`http.ts:144`); fix `bodyLimit` derivation (`http.ts:56`). *[MEDIUM]*
 14. **Fix DOCX ENOENT misclassification** (503→502) — `convert/src/docx-libreoffice.ts:83`. *[MEDIUM]*
 
