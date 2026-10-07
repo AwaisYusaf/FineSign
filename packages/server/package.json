@@ -26,7 +26,7 @@
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.0.0",
+    "@napi-rs/canvas": "^1.0.10",
     "@types/node": "^24.9.1",
     "@types/nodemailer": "^6.4.24",
     "tsx": "^4.20.6",
