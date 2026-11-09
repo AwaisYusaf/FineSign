@@ -12,7 +12,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/rate-limit": "^11.2.0",
     "@fastify/swagger": "^9.8.0",
     "@fastify/swagger-ui": "^5.2.6",
     "@finesign/convert": "0.1.0",
