@@ -16,6 +16,8 @@
   ],
   "scripts": {
     "gate": "bash scripts/gate.sh",
+    "dev:api": "npm start --workspace @finesign/server",
+    "dev:web": "npm run dev --workspace @finesign/web",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -32,6 +34,6 @@
     "typescript-eslint": "^8.63.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.12"
   }
 }

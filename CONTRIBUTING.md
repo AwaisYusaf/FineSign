@@ -29,16 +29,21 @@ confirmed findings were fixed with regression tests (reports in
 ```bash
 npm install --legacy-peer-deps                 # the flag is required (peer-dep conflict)
 npm run gate                                   # everything green?
-cp .env.example .env                           # set FINESIGN_SENDER_API_KEY at minimum
-npm start --workspace @finesign/server         # API on :4000
-npm run dev --workspace @finesign/web          # web UI on :5173 (proxies to the API)
+cp .env.example .env                           # set the four local-dev values listed at its top
+npm run dev:api                                # API on :4000 (loads .env)
+npm run dev:web                                # web UI on :5173 (proxies to the API)
 ```
 
-For local end-to-end clicking, also set `FINESIGN_DEV_EXPOSE_TOKENS=true` so the
-UI can show signer links instead of you reading them out of the mail log.
+The local-dev values in `.env` are the sender API key,
+`FINESIGN_DEV_EXPOSE_TOKENS=true` (the UI shows signer links instead of you reading
+them out of the mail log), and `FINESIGN_BASE_URL=http://localhost:5173` +
+`FINESIGN_SIGN_PATH=/s` (those links open the web UI's signer page).
 
-Node 20+ recommended. DOCX conversion needs LibreOffice on the host (optional for
+Node 20.12+ is required. DOCX conversion needs LibreOffice on the host (optional for
 most work). SQLite is bundled via `better-sqlite3`.
+
+Using an AI coding agent? [AGENTS.md](AGENTS.md) is the short brief it should read
+first (Claude Code loads it through `CLAUDE.md`).
 
 ## Useful commands
 

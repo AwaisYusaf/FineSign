@@ -54,12 +54,32 @@ if (require.main === module) {
     const { createHttpServer } = await import("./http");
     const { ConsoleLogger } = await import("@finesign/shared");
     const { SmtpMailer, makeNodemailerTransport } = await import("./smtp-mailer");
+    const { loadEnvFiles, dropEmptySettings } = await import("./env-file");
+    const logger = new ConsoleLogger();
+
+    try {
+      // Environment first, before anything reads it. A local `.env` is picked up
+      // from the working directory, then the repo root (`npm start -w` runs from
+      // packages/server, but the README puts `.env` at the root). Real env vars
+      // always win. Both src/ and dist/ sit three levels below the repo root.
+      const envFiles = loadEnvFiles(
+        [path.resolve(process.cwd(), ".env"), path.resolve(__dirname, "../../../.env")],
+        process.env
+      );
+      for (const f of envFiles) logger.info({ envFile: f.path, keys: f.keys.length }, "loaded settings from .env");
+      // `KEY=` (from .env.example, via Compose `env_file` or the file above) means
+      // "use the default", not "set to empty".
+      dropEmptySettings(process.env);
+    } catch (e) {
+      logger.error({ err: e instanceof Error ? e.message : String(e) }, "could not load .env");
+      process.exit(1);
+      return;
+    }
 
     const dataDir = process.env.FINESIGN_DATA_DIR ?? path.resolve(process.cwd(), ".finesign-data");
     // Ensure the data dir exists before SQLite opens its file (it won't create
     // parent directories itself).
     fs.mkdirSync(path.join(dataDir, "blobs"), { recursive: true });
-    const logger = new ConsoleLogger();
 
     // Management routes require an API key (S1). Refuse to boot without one
     // rather than exposing an unauthenticated API.
@@ -90,11 +110,22 @@ if (require.main === module) {
       logger.warn({}, "SMTP_HOST not set — emails are logged, not delivered (set SMTP_* to enable delivery)");
     }
 
-    const { app, deps } = buildProductionContainer({
-      sqliteFile: path.join(dataDir, "finesign.sqlite"),
-      blobRoot: path.join(dataDir, "blobs"),
-      overrides: { logger, ...(mailer ? { mailer } : {}) },
-    });
+    // The composition root validates configuration (seal level vs TSA, encryption
+    // key shape, …) and throws on a bad value. Report that as one readable log
+    // line, not an unhandled-rejection stack trace through Node internals.
+    let built: ReturnType<typeof buildProductionContainer>;
+    try {
+      built = buildProductionContainer({
+        sqliteFile: path.join(dataDir, "finesign.sqlite"),
+        blobRoot: path.join(dataDir, "blobs"),
+        overrides: { logger, ...(mailer ? { mailer } : {}) },
+      });
+    } catch (e) {
+      logger.error({ err: e instanceof Error ? e.message : String(e) }, "invalid configuration — refusing to start");
+      process.exit(1);
+      return;
+    }
+    const { app, deps } = built;
     // Behind a reverse proxy, set FINESIGN_TRUST_PROXY (e.g. "true" or a hop
     // count) so per-IP rate limiting keys off the real client IP.
     const tp = process.env.FINESIGN_TRUST_PROXY;

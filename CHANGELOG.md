@@ -4,6 +4,47 @@ All notable changes to FineSign. Milestones map to FACTORY §7.
 
 ## [Unreleased]
 
+### First-run setup and AI-agent tooling
+
+Found by following the README literally on a clean checkout.
+
+**Setup fixes**
+- **Copying `.env.example` no longer stops the server from booting.** Compose's
+  `env_file` (and any `.env` loader) turns `KEY=` into an empty string, and
+  `FINESIGN_PADES_LEVEL=""` was rejected as an unknown level — so the Docker
+  quickstart, done exactly as documented, refused to start. Empty FineSign
+  settings (`FINESIGN_*`, `SMTP_*`, `PORT`) now mean "use the default". The same
+  rule stops an empty `FINESIGN_WEBHOOK_POLL_MS` from becoming a 0 ms timer and an
+  empty `FINESIGN_TRUST_PROXY` from reaching Fastify as a proxy list.
+- **`npm start` loads `.env`.** Nothing did before, so the dev quickstart exited
+  with "FINESIGN_SENDER_API_KEY must be set" with the key sitting in `.env`. The
+  server reads `.env` from the working directory, then the repo root; variables
+  already exported win (`packages/server/src/env-file.ts`).
+- App defaults (`FINESIGN_BASE_URL`, `FINESIGN_SIGN_PATH`, dev-token exposure,
+  seal-required) are read when the container is built, not when `container.ts`
+  is imported — the import-time read ran before any boot code and could never
+  see a value loaded from `.env`.
+- `.env.example` no longer ships `FINESIGN_BASE_URL=http://localhost:4000` and
+  `FINESIGN_SIGN_PATH=/sign`. Compose fills its `${…}` placeholders from the same
+  file, so those values overrode its correct defaults and every Docker signing
+  email pointed at an API port that is not exposed. The file now explains the
+  dev values and what Compose does.
+- A configuration error at boot is one readable log line, not an
+  unhandled-rejection stack trace.
+- `npm run dev:api` / `npm run dev:web` at the root; Node floor is now 20.12
+  (`util.parseEnv`), matching CI and the Docker image.
+
+**AI-native development**
+- `AGENTS.md` (read by most coding agents) and `CLAUDE.md` (imports it), plus
+  package-level guides for `packages/web` and `packages/pades`.
+- `.claude/settings.json`: allowlist for the gate, build, lint and test commands;
+  `.env` reads denied; a PostToolUse hook that runs the boundary check whenever a
+  file in `packages/core/src` or `packages/domain/src` is edited.
+- `.claude/agents/adversarial-reviewer.md`: the FACTORY §5 review as a reusable
+  read-only subagent.
+- `.claude/launch.json`: a `finesign-api` dev-server config next to
+  `finesign-web`, with local-dev settings baked in.
+
 ### Finalization pass — open-source readiness
 
 Fixes found by exercising the product rather than re-reading it: driving the web

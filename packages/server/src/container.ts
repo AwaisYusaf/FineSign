@@ -38,14 +38,22 @@ import { EnvelopeApp, type AppConfig, type AppDeps } from "./app";
 import { ConsoleMailer, type Mailer } from "./mailer";
 import { PadesDocumentSealer, type DocumentSealer } from "./sealer";
 
-const DEFAULT_CONFIG: AppConfig = {
-  baseUrl: process.env.FINESIGN_BASE_URL ?? "http://localhost:4000",
-  signPath: process.env.FINESIGN_SIGN_PATH ?? "/sign",
-  tokenTtlMs: 14 * 24 * 3600 * 1000, // 14 days
-  maxUploadBytes: 10 * 1024 * 1024, // 10 MB
-  devExposeTokens: process.env.FINESIGN_DEV_EXPOSE_TOKENS === "true",
-  sealRequired: process.env.FINESIGN_SEAL_REQUIRED === "true",
-};
+/**
+ * App defaults, read from the environment when a container is BUILT rather than
+ * when this module is imported. `index.ts` re-exports this module, so an
+ * import-time read ran before the boot code had loaded `.env` — and silently
+ * ignored `FINESIGN_BASE_URL`, `FINESIGN_SIGN_PATH` and friends from that file.
+ */
+function defaultConfig(): AppConfig {
+  return {
+    baseUrl: process.env.FINESIGN_BASE_URL ?? "http://localhost:4000",
+    signPath: process.env.FINESIGN_SIGN_PATH ?? "/sign",
+    tokenTtlMs: 14 * 24 * 3600 * 1000, // 14 days
+    maxUploadBytes: 10 * 1024 * 1024, // 10 MB
+    devExposeTokens: process.env.FINESIGN_DEV_EXPOSE_TOKENS === "true",
+    sealRequired: process.env.FINESIGN_SEAL_REQUIRED === "true",
+  };
+}
 
 export interface ContainerOverrides {
   repo?: EnvelopeRepository;
@@ -335,7 +343,7 @@ export function buildInMemoryContainer(overrides: ContainerOverrides = {}): { ap
     clock: overrides.clock ?? new SystemClock(),
     ids: overrides.ids ?? new CryptoIdGenerator(),
     logger,
-    config: { ...DEFAULT_CONFIG, ...overrides.config },
+    config: { ...defaultConfig(), ...overrides.config },
     sealer: overrides.sealer,
     webhooks:
       overrides.webhooks === null
@@ -382,7 +390,7 @@ export function buildProductionContainer(params: {
     clock: o.clock ?? new SystemClock(),
     ids: o.ids ?? new CryptoIdGenerator(),
     logger,
-    config: { ...DEFAULT_CONFIG, ...o.config },
+    config: { ...defaultConfig(), ...o.config },
     sealer: o.sealer ?? buildSealerFromEnv(logger),
     webhooks:
       o.webhooks === null

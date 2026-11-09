@@ -54,26 +54,34 @@ Architecture and rules: [FACTORY.md](FACTORY.md) ·
 
 ## Quick start (dev)
 
+Requires Node 20.12+.
+
 ```bash
 npm install --legacy-peer-deps
-npm run gate                              # boundaries + build + typecheck + lint + tests + web
-cp .env.example .env                      # set FINESIGN_SENDER_API_KEY at minimum
-npm start --workspace @finesign/server    # API on :4000 (SQLite + local blobs)
-npm run dev  --workspace @finesign/web    # web UI on :5173
+npm run gate                 # boundaries + build + typecheck + lint + tests + web
+cp .env.example .env         # then set the four local-dev values listed at its top
+npm run dev:api              # API on :4000 (SQLite + local blobs; loads .env)
+npm run dev:web              # web UI on :5173 (proxies /api and /sign to :4000)
 ```
 
 > `--legacy-peer-deps` is required (a transitive `unpdf`/`@napi-rs/canvas` peer
 > conflict otherwise breaks install).
 
-Add `FINESIGN_DEV_EXPOSE_TOKENS=true` to `.env` for local clicking, so the UI can
-show signer links instead of you fishing them out of the mail log.
+The four local-dev values are the sender API key, `FINESIGN_DEV_EXPOSE_TOKENS=true`
+(so the UI shows signer links instead of you fishing them out of the mail log),
+`FINESIGN_BASE_URL=http://localhost:5173` and `FINESIGN_SIGN_PATH=/s` (so those
+links open the web UI's signer page). Variables exported in your shell override
+`.env`.
 
 ## Self-host with Docker
 
 ```bash
 cp .env.example .env        # set FINESIGN_SENDER_API_KEY (and, recommended, FINESIGN_ENCRYPTION_KEY)
-docker compose up --build   # API on :4000, web on :8080
+docker compose up --build   # web UI + API on :8080 (the API is proxied, not exposed)
 ```
+
+Leave `FINESIGN_BASE_URL` empty for a local try-out, or set it to your public
+URL; Compose fills in the signer path.
 
 Data (SQLite + encrypted blobs) persists in the `finesign-data` volume. DOCX
 support and email need LibreOffice (bundled in the image) and SMTP (set `SMTP_*`).

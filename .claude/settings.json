@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run gate)",
+      "Bash(npm run build)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run lint)",
+      "Bash(npm run boundaries)",
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(bash scripts/gate.sh)",
+      "Bash(bash scripts/check-boundaries.sh)",
+      "Bash(npx tsc -b)",
+      "Bash(npx tsc -b *)",
+      "Bash(npx eslint *)",
+      "Bash(node --test *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./packages/*/.env)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/boundaries-on-edit.mjs\"",
+            "timeout": 30,
+            "statusMessage": "Checking architecture boundaries"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -5,9 +5,12 @@
 > Read this first, then trust the code + the `docs/` referenced below. When facts
 > here disagree with the code, **the code wins** — update this file.
 >
-> _Last updated: 2026-08-19. Status: DG1–DG5 complete, plus a finalization pass
-> that fixed the defects listed in CHANGELOG "Finalization pass"; **188 tests
-> green across 8 packages**; `npm run gate` green; CI runs the gate on every PR._
+> _Last updated: 2026-11-09. Status: DG1–DG5 complete, plus a finalization pass
+> and a first-run setup pass (CHANGELOG "First-run setup and AI-agent tooling");
+> `npm run gate` green; CI runs the gate on every PR. The short brief for agents is
+> now [`AGENTS.md`](../AGENTS.md); this file keeps the deeper history. Next up: the
+> "Web UI gaps" list in `docs/BACKLOG.md` (browser E2E tests first, then the UI
+> rebuild)._
 
 ---
 
@@ -57,9 +60,9 @@ web app's lint/build. It must be green.
 ```bash
 npm install --legacy-peer-deps     # the flag is REQUIRED (see gotchas)
 npm run gate                       # boundaries + build + typecheck + lint + tests + web
-cp .env.example .env               # set FINESIGN_SENDER_API_KEY at minimum
-npm start --workspace @finesign/server   # API on :4000 (SQLite + local blobs)
-npm run dev  --workspace @finesign/web   # web UI on :5173 (Vite)
+cp .env.example .env               # set the four local-dev values listed at its top
+npm run dev:api                    # API on :4000 (SQLite + local blobs; loads .env)
+npm run dev:web                    # web UI on :5173 (Vite)
 ```
 
 **Self-host (one command):** `docker compose up --build` → web on `:8080`
@@ -68,7 +71,7 @@ data in the `finesign-data` volume. Requires `.env` with `FINESIGN_SENDER_API_KE
 Both containers run unprivileged and are health-checked; `web` waits for a healthy
 `server`. CI builds and boots this stack on every PR that touches it.
 
-Node 20+ (dev box is on 22). DOCX needs LibreOffice on the host (bundled in the
+Node 20.12+ (dev box is on 22). DOCX needs LibreOffice on the host (bundled in the
 Docker image). Built server entrypoint: `node packages/server/dist/index.js`.
 
 ---

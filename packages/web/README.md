@@ -33,6 +33,8 @@ behind the dev proxy. The server builds signing links with this path when
      without reading email. **Never enable in production.**
    - `FINESIGN_BASE_URL` + `FINESIGN_SIGN_PATH` make signing links point at the
      web app's signer route.
+   - Or put the same values in the repo-root `.env` (see `.env.example`) and run
+     `npm run dev:api` from the root — the server loads it automatically.
 
 2. **Start the web app** (from `packages/web`):
 
@@ -53,8 +55,9 @@ npm run lint     # eslint (react-hooks rules)
 
 ## Notes / not-yet
 
-- Field placement is one-way in this version (no drag-to-move or delete-field
-  endpoint yet). Reload the draft to start fields over.
+- A placed field can be removed (click it) but not yet moved or resized, and a
+  draft cannot be reopened in the wizard once you leave it — see `docs/BACKLOG.md`
+  ("Web UI gaps").
 - Real-time status updates (websockets) are deferred (backlog M5.4); the detail
   page reflects state on load.
 - The typed-signature preview uses a system cursive fallback; the *stamped*

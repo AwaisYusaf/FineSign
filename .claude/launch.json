@@ -2,6 +2,21 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "finesign-api",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "FINESIGN_SENDER_API_KEY=dev-sender-key-123456",
+        "FINESIGN_DEV_EXPOSE_TOKENS=true",
+        "FINESIGN_BASE_URL=http://localhost:5173",
+        "FINESIGN_SIGN_PATH=/s",
+        "FINESIGN_DEV_SEAL=true",
+        "FINESIGN_DEV_TSA=true",
+        "PORT=4000",
+        "npm", "start", "--workspace", "@finesign/server"
+      ],
+      "port": 4000
+    },
+    {
       "name": "finesign-web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--workspace", "@finesign/web"],

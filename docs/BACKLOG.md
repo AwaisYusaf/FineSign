@@ -123,6 +123,43 @@ by priority within each milestone. `[ ]` todo · `[~]` in progress · `[x]` done
 - [ ] X.7 Sandbox DOCX conversion (seccomp/container, no-network, macros off) — S4 follow-up
 - [ ] X.8 Full sender identity/auth (accounts, orgs, per-sender scoping) — supersedes the M4 API-key guard
 
+## First-run setup + agent tooling (2026-11-09)
+- [x] S.1 Empty FineSign settings mean "default" — a copied `.env.example` booted
+      neither via Compose nor locally (`FINESIGN_PADES_LEVEL=""` threw at boot).
+- [x] S.2 The server loads `.env` (cwd, then repo root; exported vars win); app
+      defaults are read at container build, not module import.
+- [x] S.3 `.env.example` stops overriding Compose's signer-link defaults; dev values
+      documented; `dev:api` / `dev:web` scripts; Node floor 20.12.
+- [x] S.4 `AGENTS.md` + `CLAUDE.md` (+ web, pades guides), `.claude/settings.json`
+      (allowlist, `.env` deny, boundary hook), adversarial-reviewer subagent.
+
+## Web UI gaps (found driving the UI in a browser, 2026-11-09)
+Source list for the UI rebuild. Each needs a browser-level test once U.10 lands.
+- [ ] U.1 Resume a draft: the wizard always starts a new envelope and a draft's
+      detail page only offers "Void", so leaving the wizard strands the draft.
+- [ ] U.2 Move / resize a placed field (today: remove + re-drop only).
+- [ ] U.3 Edit or remove recipients and documents while in draft (the domain has
+      `removeField` only — needs `removeRecipient` / `removeDocument`, audited).
+- [ ] U.4 Signature pad: the canvas is a fixed 520 px but can shrink with CSS, and
+      pointer coordinates are not rescaled, so strokes land off-target on narrow
+      screens; it also ignores `devicePixelRatio` (blurry on HiDPI). Found by
+      reading `SignaturePad.jsx` — confirm on a phone. Use pointer events.
+- [ ] U.5 The typed-signature preview uses a system cursive font, not the font that
+      is stamped; serve `finesign-core`'s bundled fonts to the browser.
+- [ ] U.6 Signer guidance: jump to the next required field, show progress; replace
+      `window.prompt` (decline, void) with a proper dialog that requires a reason.
+- [ ] U.7 `ApiKeyGate` stores any key without checking it; verify against the API
+      first and show a clear error.
+- [ ] U.8 The Webhooks form inputs are unstyled.
+- [ ] U.9 Code-split pdf.js — the main bundle is 565 kB (Vite warns).
+- [ ] U.10 Browser end-to-end tests (Playwright) for: create → send → sign
+      (sequential, access code, CC) → complete → verify seal; decline; void; expiry.
+- [ ] U.11 Move `packages/web` to TypeScript and a component system (shadcn/ui +
+      Tailwind) — FACTORY NFR-5 asks for one language across the stack.
+- [ ] C.1 Certificate of completion: long user-agent strings run off the page.
+- [ ] C.2 A `cc` recipient still reads "pending" on a completed envelope (detail
+      page + certificate) although the completed copy was sent.
+
 ## Critical-review remediation (multi-agent review — docs/review/critical-review.md)
 ### Fixed this pass (gate green)
 - [x] R.A PAdES crypto: chain-trust bound to signer (HIGH), stop stripping trailing
