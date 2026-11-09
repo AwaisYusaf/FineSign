@@ -35,7 +35,7 @@ or you are testing stale code.
 | `packages/shared` | Typed errors, `Clock`, `IdGenerator`, token hashing, `Logger` | No |
 | `packages/domain` | Envelopes, recipients, fields, state machine, routing, hash-chained audit, ports | **No** |
 | `packages/convert` | PDF passthrough + DOCX→PDF (LibreOffice) | Yes |
-| `packages/storage` | Repositories (in-memory/SQLite/Postgres), blob stores, webhook store, encryption at rest | Yes |
+| `packages/storage` | Repositories (in-memory/SQLite; Postgres envelope repo is experimental and unwired), blob stores, webhook store, encryption at rest | Yes |
 | `packages/pades` | PAdES B-B → B-LTA sealing + verification | Yes — see [its AGENTS.md](packages/pades/AGENTS.md) |
 | `packages/server` | Fastify API + composition root (`container.ts`) | Yes |
 | `packages/web` | Sender console + signer page + webhooks admin | Browser — see [its AGENTS.md](packages/web/AGENTS.md) |
@@ -94,9 +94,11 @@ Dependencies point one way: `core`/`shared` → `domain` → `storage`/`convert`
   that attempt loses: blobs get fresh keys, and a fixed-key blob (the standalone
   certificate) is written only after the save succeeds.
 - **Storage adapters share contract tests** (`storage/test/repositories.test.ts`,
-  `storage/src/webhook-contract.ts`). A new entity field means: update the contract
-  fixtures and all three repositories; SQL repos keep a denormalized `expires_at`
-  that must track the aggregate.
+  `storage/src/webhook-contract.ts`). SQLite is the supported production store
+  (decision D7); new stores need in-memory + SQLite adapters. A new envelope field
+  means: update the contract fixtures and every envelope repository (the
+  experimental Postgres one included, while it exists); SQL repos keep a
+  denormalized `expires_at` that must track the aggregate.
 - **Coordinates:** one convention everywhere — display-space fractions (0–1),
   top-left origin. `core` converts to PDF points.
 
@@ -114,6 +116,16 @@ Dependencies point one way: `core`/`shared` → `domain` → `storage`/`convert`
 - Dev-only flags that must never reach production: `FINESIGN_DEV_EXPOSE_TOKENS`,
   `FINESIGN_DEV_SEAL`, `FINESIGN_DEV_TSA`, `FINESIGN_WEBHOOK_ALLOW_PRIVATE`,
   `FINESIGN_ENCRYPTION_ALLOW_PLAINTEXT_READ`.
+
+## How work is planned
+
+No feature starts in code. First a **problem analysis** (what's missing and why
+it matters — `docs/plan/`), then a **ticket** per change from
+`docs/tickets/TEMPLATE.md` (problem, design, numbered acceptance criteria, test
+plan, risks), then a **review** of the plan (an independent reviewer, then the
+product owner approves), then implementation one ticket at a time, with commits
+naming the ticket (`… (FS-006)`). A bug found while implementing a ticket is
+fixed inside that ticket. See [`docs/tickets/README.md`](docs/tickets/README.md).
 
 ## Definition of done
 
@@ -133,6 +145,7 @@ Dependencies point one way: `core`/`shared` → `domain` → `storage`/`convert`
 | Product scope | `docs/PRD.md`, `docs/DOCUSIGN-PARITY.md` |
 | Architecture | `docs/ARCHITECTURE.md`, `docs/adr/` |
 | Current state, deeper context | `docs/SESSION-HANDOFF.md` |
-| What to build next | `docs/BACKLOG.md` |
+| What to build next | `docs/tickets/README.md` (board), `docs/plan/` (why) |
+| History of done / deferred items | `docs/BACKLOG.md` |
 | Threat model | `SECURITY.md`, `docs/review/` |
 | Every env var | `.env.example` |

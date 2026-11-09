@@ -33,8 +33,9 @@ agreement domain, a hardened Fastify API, and a React web UI.
   resumable drafts; a guided signer page (progress checklist, "next field", typed
   signatures in the exact fonts that get stamped, or drawn ones); light/dark mode;
   works on phones. React + TypeScript + Tailwind + shadcn/ui.
-- **Self-hostable** — SQLite + local filesystem out of the box (Postgres adapter
-  included); one-command Docker Compose.
+- **Self-hostable** — SQLite + local filesystem, one-command Docker Compose.
+  (An experimental Postgres envelope repository exists in `@finesign/storage` but
+  is not wired into the server yet — see `docs/tickets/FS-023`.)
 
 Each security-sensitive subsystem was hardened with a multi-agent adversarial
 review — see `docs/review/`.
@@ -47,7 +48,7 @@ review — see `docs/review/`.
 | [`@finesign/shared`](packages/shared) | Typed errors, `Clock`, id/token generation, logger. |
 | [`@finesign/domain`](packages/domain) | Pure agreement model: envelopes, recipients, fields, state machine, hash-chained audit, ports. |
 | [`@finesign/convert`](packages/convert) | Document normalization: PDF passthrough + DOCX→PDF (LibreOffice). |
-| [`@finesign/storage`](packages/storage) | `EnvelopeRepository` + `BlobStore` + webhook store adapters (in-memory, SQLite, Postgres, local FS) + encryption-at-rest decorator. |
+| [`@finesign/storage`](packages/storage) | `EnvelopeRepository` + `BlobStore` + webhook store adapters (in-memory, SQLite, local FS; an experimental, unwired Postgres envelope repository) + encryption-at-rest decorator. |
 | [`@finesign/pades`](packages/pades) | PAdES B-B→B-LTA signing + verification (CMS/PKI, RFC 3161, DSS). |
 | [`@finesign/server`](packages/server) | Fastify REST API + composition root: sealing, webhooks, encryption wiring. |
 | [`@finesign/web`](packages/web) | Web UI (React 19, TypeScript, Tailwind, shadcn/ui) — sender console, guided signer page, webhooks admin; light/dark, mobile-ready. |

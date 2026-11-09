@@ -93,11 +93,14 @@ A task is DONE only when ALL hold:
 
 ## 4. The autonomous build loop
 
-The agent repeats this loop, one backlog item at a time:
+The agent repeats this loop, one ticket at a time. Tickets come from a written
+problem analysis and are reviewed and approved before any of them is built
+(`docs/tickets/README.md`).
 
 ```
-1. SELECT   the next unblocked, highest-priority item from docs/BACKLOG.md.
-2. SPEC     restate the item as an acceptance checklist (what proves it works).
+1. SELECT   the next approved, unblocked ticket from docs/tickets/README.md.
+2. SPEC     the ticket's acceptance criteria are the checklist; refine the
+            ticket (not just the code) if implementation shows it was wrong.
 3. BUILD    implement the smallest slice that satisfies the checklist + tests.
 4. GATE     run scripts/gate.sh. If red → fix → repeat. Never proceed on red.
 5. CRITIQUE spawn an adversarial reviewer (see §5) against the diff.

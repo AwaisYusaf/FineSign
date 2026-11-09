@@ -35,7 +35,7 @@ shared┘        └─→ convert ──┼─→ server ─→ web
 
 | Port | Purpose | Reference adapter |
 |---|---|---|
-| `EnvelopeRepository` | persist/load envelopes + recipients + fields + events | in-memory, SQLite, Postgres |
+| `EnvelopeRepository` | persist/load envelopes + recipients + fields + events | in-memory, SQLite (Postgres: experimental, not wired — FS-023) |
 | `BlobStore` | store/fetch document bytes by key | local FS, in-memory (S3 later) |
 | `DocumentConverter` | normalize a source doc to signable PDF | PDF passthrough, DOCX→PDF |
 | `Clock` | current time (injected) | system, fixed (tests) |

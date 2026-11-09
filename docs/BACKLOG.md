@@ -1,8 +1,9 @@
 # FineSign — Backlog
 
-The living task list that drives the autonomous build loop (FACTORY §4). Ordered
-by priority within each milestone. `[ ]` todo · `[~]` in progress · `[x]` done ·
-`[>]` deferred (with reason).
+The record of what has been built and what was deferred, and why. New work is
+planned as tickets in [`docs/tickets/`](tickets/README.md) (from the analysis in
+[`docs/plan/`](plan/)); open items below link to the ticket that covers them.
+`[ ]` todo · `[~]` in progress · `[x]` done · `[>]` deferred (with reason).
 
 ## M0 — Harness + core
 - [x] M0.1 Monorepo skeleton, workspaces, root tsconfig, gate script
@@ -120,8 +121,8 @@ by priority within each milestone. `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] X.5 Docker compose for one-command self-host (non-root images, health-gated
       startup, security headers on the SPA, CI builds + boots the stack)
 - [ ] X.6 Port core's AI signer-field detector as optional `@finesign/detect-ai`
-- [ ] X.7 Sandbox DOCX conversion (seccomp/container, no-network, macros off) — S4 follow-up
-- [ ] X.8 Full sender identity/auth (accounts, orgs, per-sender scoping) — supersedes the M4 API-key guard
+- [ ] X.7 (→ FS-014b) Sandbox DOCX conversion (seccomp/container, no-network, macros off) — S4 follow-up
+- [ ] X.8 Full sender identity/auth (accounts, orgs, per-sender scoping) — supersedes the M4 API-key guard → FS-001a/b, FS-002, FS-003, FS-004a/b
 
 ## First-run setup + agent tooling (2026-11-09)
 - [x] S.1 Empty FineSign settings mean "default" — a copied `.env.example` booted
@@ -136,10 +137,10 @@ by priority within each milestone. `[ ]` todo · `[~]` in progress · `[x]` done
 ## Web UI gaps (found driving the UI in a browser, 2026-11-09)
 Source list for the UI rebuild. Each needs a browser-level test once U.10 lands.
 - [x] U.1 Resume a draft — every wizard step has a URL; drafts show "Continue editing".
-- [ ] U.2 Move / resize a placed field (today: remove + re-drop only). Include
+- [ ] U.2 (→ FS-006) Move / resize a placed field (today: remove + re-drop only). Include
       arrow-key nudging: keyboard placement exists (a "Place" button per page,
       centred on the page) but a keyboard user can't reposition what it drops.
-- [ ] U.3 Edit or remove recipients and documents while in draft (the domain has
+- [ ] U.3 Edit or remove recipients and documents while in draft (→ FS-007; the domain has
       `removeField` only — needs `removeRecipient` / `removeDocument`, audited).
 - [x] U.4 Signature pad strokes landed off-target when CSS shrank the canvas
       (confirmed by E2E: 47% of the intended reach) and the fixed height squashed
@@ -175,13 +176,13 @@ Source list for the UI rebuild. Each needs a browser-level test once U.10 lands.
       documents and the wizard refused to send; no keyboard route to place a
       field; the signature dialog forgot the adopted signature; the console
       listed oldest first; light-mode badges under 4.5:1.
-- [ ] U.18 Text beyond Latin-1 on the page and the certificate: text fields and
+- [ ] U.18 (→ FS-013) Text beyond Latin-1 on the page and the certificate: text fields and
       the certificate use Helvetica (WinAnsi), so Central European letters ("ř",
       "Ł", "ș"), Cyrillic, Greek, CJK, Arabic, … are refused in text fields and
       print as "?" in certificate names. Embed a Unicode font (e.g. Noto Sans,
       subset) for both, check coverage with fontkit as typed names do, then drop
       the 400.
-- [ ] U.19 Approvers adopt a signature like signers do (the API requires one).
+- [ ] U.19 (→ FS-012) Approvers adopt a signature like signers do (the API requires one).
       Decide whether approval should need only consent, and say so in the API.
 
 ## Critical-review remediation (multi-agent review — docs/review/critical-review.md)
@@ -200,15 +201,15 @@ Source list for the UI rebuild. Each needs a browser-level test once U.10 lands.
       `put()`, DOCX ENOENT-vs-conversion-failure, output size cap, process-group
       SIGKILL on timeout, sqlite `seq` unique index
 ### Deferred (filed, not done)
-- [ ] R.1 Keyed/anchored audit chain (HMAC or external anchoring) — a DB-write
+- [ ] R.1 (→ FS-015) Keyed/anchored audit chain (HMAC or external anchoring) — a DB-write
       attacker can currently recompute the unkeyed SHA-256 chain (mitigated pre-
       completion: the completed cert is PAdES-sealed). MEDIUM.
-- [ ] R.2 Notification outbox / retry — a mail failure after persist leaves a
+- [ ] R.2 (→ FS-009a) Notification outbox / retry — a mail failure after persist leaves a
       recipient un-notified with no resend (pairs with parity "reminders/resend").
-- [ ] R.3 Crafted-PDF parse timeout/resource cap (worker or `getPdfInfo` bound)
+- [ ] R.3 (→ FS-014a) Crafted-PDF parse timeout/resource cap (worker or `getPdfInfo` bound)
       beyond the 10 MB size cap.
 - [ ] R.4 Full EC-PKCS#12 loading (PKI.js/OpenSSL) — forge P12 parse is RSA-only.
-- [ ] R.5 Certificate document-hash over the delivered sealed artifact (currently
+- [ ] R.5 (→ FS-016) Certificate document-hash over the delivered sealed artifact (currently
       over the pre-seal intermediate) so it is self-verifiable.
 - [x] R.7 Concurrent writes: a signer's submission that raced another write to the
       envelope (co-signer signing or opening a link) was rejected with a raw 409
