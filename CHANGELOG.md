@@ -4,6 +4,20 @@ All notable changes to FineSign. Milestones map to FACTORY §7.
 
 ## [Unreleased]
 
+### Fixed
+- **A void never reached webhooks or recipients** (FS-017). Voiding saved the
+  envelope directly instead of going through the delivery path, so webhook
+  subscribers never received `envelope_voided` (the envelope is terminal, so it
+  was never caught up), and recipients who already had a link were never told the
+  request was withdrawn. Voids now fan out to webhooks like every other
+  transition, and each recipient already in the flow gets one "Withdrawn" email —
+  without a link, and without the sender's free-text reason.
+
+### Planning
+- Work is now planned as reviewed, approved tickets: a written gap analysis
+  (`docs/plan/`), 29 tickets with acceptance criteria (`docs/tickets/`), an
+  independent review, then implementation one ticket at a time.
+
 ### A rebuilt web UI (TypeScript, Tailwind, shadcn/ui)
 
 `packages/web` is rewritten in strict TypeScript on React 19, Tailwind CSS v4 and

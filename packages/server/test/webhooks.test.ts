@@ -106,6 +106,23 @@ test("webhook: subscribe → send → deliver posts an HMAC-signed, secret-free 
   await server.close();
 });
 
+test("webhook: a void reaches subscribers (FS-017)", async () => {
+  // voidEnvelope used to save directly, skipping the outbox; the envelope is
+  // terminal, so no later save ever delivered `envelope_voided`.
+  const { server, mailer, capture } = await setup();
+  await mgmt(server, "POST", "/api/webhooks", { url: "https://hooks.receiver.test/finesign", secret: SECRET });
+  const { envId } = await sendOneSigner(server, mailer);
+
+  const voided = await mgmt(server, "POST", `/api/envelopes/${envId}/void`, { reason: "wrong counterparty" });
+  assert.equal(voided.statusCode, 200, voided.payload);
+  await mgmt(server, "POST", "/api/webhooks/deliver");
+
+  const hook = capture.calls.find((c) => c.init.headers["x-finesign-event"] === "envelope_voided");
+  assert.ok(hook, "an envelope_voided event was POSTed");
+  assert.equal(JSON.parse(hook!.init.body).envelope.status, "voided");
+  await server.close();
+});
+
 test("webhook: a failing endpoint is retried with backoff, then succeeds", async () => {
   const capture = new CaptureFetch();
   capture.status = 500;

@@ -277,13 +277,34 @@ test("editing after send is blocked", () => {
   );
 });
 
-test("void moves draft/sent to voided", () => {
+test("void moves draft/sent to voided and tells only recipients already in the flow (FS-017)", () => {
   const { svc, issueToken } = make();
-  let { env } = draftTwoSigners(svc);
+  let { env, r1, r2 } = draftTwoSigners(svc);
+
+  // A draft was never sent: nobody to tell.
+  const draftVoid = svc.voidEnvelope(env, "never mind");
+  assert.equal(draftVoid.envelope.status, "voided");
+  assert.deepEqual(draftVoid.effects, []);
+
+  // Sequential: only Alice has been notified, so only Alice hears it was withdrawn.
   env = svc.send(env, issueToken).envelope;
   const voided = svc.voidEnvelope(env, "obsolete");
-  assert.equal(voided.status, "voided");
-  assert.equal(voided.voidedReason, "obsolete");
+  assert.equal(voided.envelope.status, "voided");
+  assert.equal(voided.envelope.voidedReason, "obsolete");
+  assert.deepEqual(voided.effects, [{ type: "notify", recipientId: r1, reason: "voided" }]);
+  // The sender's reason may be internal; it is never passed to recipients.
+  assert.ok(!JSON.stringify(voided.effects).includes("obsolete"));
+  assert.equal(voided.envelope.audit.at(-1)?.type, "envelope_voided");
+
+  // After Alice signs, Bob is notified: a void now tells both (Alice so she knows
+  // the agreement won't complete).
+  env = svc.applySignature(env, r1, { kind: "typed", name: "Alice", font: "great_vibes" }, [], CONSENT, issueToken).envelope;
+  const later = svc.voidEnvelope(env, "obsolete");
+  assert.deepEqual(
+    later.effects.map((e) => (e.type === "notify" ? e.recipientId : null)).sort(),
+    [r1, r2].sort()
+  );
+  assert.equal(verifyAuditChain(later.envelope.audit), -1);
 });
 
 // ── DG3: expiration ─────────────────────────────────────────────────────────

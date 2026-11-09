@@ -29,7 +29,7 @@ decisions D1–D16. **AR** = adversarial review required before Done.
 
 | ID | Ticket | Pri | Size | Milestone | Depends on | AR | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| [FS-017](FS-017-voids-reach-webhooks-and-recipients.md) | Bug: a void never reaches webhooks or recipients | P0 | S | M6.9 Fix first | — | | Approved |
+| [FS-017](FS-017-voids-reach-webhooks-and-recipients.md) | Bug: a void never reaches webhooks or recipients | P0 | S | M6.9 Fix first | — | | Done |
 | [FS-018](FS-018-schema-migrations.md) | Versioned schema migrations | P0 | M | M6.9 | D7 | | Approved |
 | [FS-001a](FS-001a-accounts-and-sessions.md) | User accounts and sessions (server) | P0 | L | M7 Accounts & access | FS-018 | ✔ | Approved |
 | [FS-001b](FS-001b-console-sign-in-and-upgrade.md) | Console sign-in and the upgrade path | P0 | M | M7 | FS-001a | ✔ | Approved |

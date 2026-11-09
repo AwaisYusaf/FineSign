@@ -386,9 +386,11 @@ export class EnvelopeApp {
   async voidEnvelope(envelopeId: string, reason: string): Promise<Envelope> {
     return this.retryOnConflict(async () => {
       const env = await this.load(envelopeId);
-      const voided = this.svc.voidEnvelope(env, reason);
-      await this.deps.repo.save(voided);
-      return voided;
+      const result = this.svc.voidEnvelope(env, reason);
+      // Through persistThenDeliver like every transition: the save, then the
+      // webhook fan-out and the "withdrawn" emails (FS-017 — this used to save
+      // directly, so neither ever happened).
+      return this.persistThenDeliver(result.envelope, result.effects);
     });
   }
 
@@ -935,6 +937,10 @@ export class EnvelopeApp {
       case "expired":
         subject = `Expired: ${env.title}`;
         text = `${name}, "${env.title}" expired before all recipients signed.`;
+        break;
+      case "voided":
+        subject = `Withdrawn: ${env.title}`;
+        text = `${name}, the sender has withdrawn "${env.title}", so it will not be completed. There is nothing more for you to do.`;
         break;
     }
     await this.deps.mailer.send({ to, subject, text, link });

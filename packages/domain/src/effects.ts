@@ -10,7 +10,7 @@ import type { SignatureInput } from "./types";
  *  when `toSender` is set (the sender is not in the recipients list). */
 export interface NotifyEffect {
   type: "notify";
-  reason: "your_turn" | "completed_copy" | "declined" | "reminder" | "resent" | "expired";
+  reason: "your_turn" | "completed_copy" | "declined" | "reminder" | "resent" | "expired" | "voided";
   /** Recipient to notify (omitted when `toSender`). */
   recipientId?: string;
   /** Notify the envelope sender instead of a recipient. */

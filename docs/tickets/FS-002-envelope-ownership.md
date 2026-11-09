@@ -34,6 +34,8 @@ default: senders see only their own); reassigning ownership (FS-004a).
   `"schemaVersion": 1` here (D14 default) and the CHANGELOG lists the change.
 - Webhooks (subscriptions see every envelope's events) and the expiry sweep
   become **admin-only** routes (D6 default; per-user webhooks are a follow-up).
+- When an admin voids an envelope they don't own, the owner is notified (a
+  `voided` notice to the sender; FS-017 notifies only recipients today).
 - All envelope routes run under the same owner check, including draft
   operations wrapped in `retryOnConflict` (FS-006/FS-007).
 - Storage: `owner_id` column + index in SQLite/Postgres (migration adds it as

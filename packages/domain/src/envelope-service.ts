@@ -613,13 +613,30 @@ export class EnvelopeService {
   }
 
   /** Void a draft or sent envelope (terminal). */
-  voidEnvelope(env: Envelope, reason: string, actor = "sender"): Envelope {
-    const next: Envelope = {
+  /**
+   * Void (withdraw) a draft or sent envelope. Terminal.
+   *
+   * Returns `notify` effects for every recipient already in the flow (notified,
+   * viewed, or signed — a signer should know the agreement won't complete), so
+   * the server tells them their link was withdrawn rather than letting it just
+   * stop working. Like a decline, recipients still pending in a later routing
+   * step are not told the envelope existed, and the sender's free-text reason is
+   * kept off recipient notices (it may be internal). The server must run the
+   * result through `persistThenDeliver`, which also fans `envelope_voided` out
+   * to webhooks.
+   */
+  voidEnvelope(env: Envelope, reason: string, actor = "sender"): DomainResult {
+    let next: Envelope = {
       ...env,
       status: assertEnvelopeTransition(env.status, "voided"),
       voidedReason: reason,
     };
-    return this.audit(next, "envelope_voided", actor, { reason });
+    next = this.audit(next, "envelope_voided", actor, { reason });
+    const inFlow = (s: Recipient["status"]) => s === "notified" || s === "viewed" || s === "signed";
+    const effects: Effect[] = next.recipients
+      .filter((r) => inFlow(r.status))
+      .map((r) => ({ type: "notify" as const, recipientId: r.id, reason: "voided" as const }));
+    return { envelope: next, effects };
   }
 
   /** Record a document's freshly-stamped signed copy (server calls after core stamps). */

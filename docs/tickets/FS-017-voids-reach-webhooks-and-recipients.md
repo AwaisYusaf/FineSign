@@ -2,7 +2,7 @@
 
 | Priority | Size | Milestone | Depends on | Backlog / PRD | Status |
 | --- | --- | --- | --- | --- | --- |
-| P0 (bug) | S | M6.9 Fix first | — | PRD FR-E5, FR-R1; DG4 webhooks | Approved |
+| P0 (bug) | S | M6.9 Fix first | — | PRD FR-E5, FR-R1; DG4 webhooks | Done |
 
 ## Problem
 `EnvelopeApp.voidEnvelope` (`server/src/app.ts`) saves the voided envelope
@@ -25,9 +25,9 @@ says "withdrawn").
 ## Design
 - Domain: `voidEnvelope` returns a `DomainResult` with `notify` effects for every
   recipient who has been notified (status `notified` or `viewed`, plus signers
-  who signed, so they know the agreement won't complete) with reason `voided`,
-  and one for the sender only when an actor other than the sender voided it (not
-  today; keeps the door open for admin voids in FS-002).
+  who signed, so they know the agreement won't complete) with reason `voided`.
+  Telling the owner when *someone else* voids their envelope only becomes
+  possible with admin voids, so it moved to FS-002.
 - Server: `voidEnvelope` uses `persistThenDeliver`, so the webhook outbox is
   filled from the audit trail and mail goes out after the save. Add a `voided`
   case to the email text (and to FS-010's templates).
@@ -54,4 +54,13 @@ The "withdrawn" email must not include a link or the void reason's raw HTML
 (plain text today; FS-010 escapes).
 
 ## Docs to update
-CHANGELOG (Fixed), BACKLOG.
+CHANGELOG (Fixed).
+
+## Outcome
+Done. Regression tests: `webhooks.test.ts` "a void reaches subscribers",
+`concurrency.test.ts` "a void tells each notified recipient once, even when its
+save loses a race" and "voiding a draft sends no email", and the domain test
+"void moves draft/sent to voided and tells only recipients already in the flow".
+The two server regression tests failed before the fix. The sender's void reason
+is deliberately left out of recipient emails (it may be internal), matching how
+decline reasons are handled.

@@ -302,3 +302,40 @@ test("conflict retries are bounded: persistent contention surfaces as a 409, not
   });
   assert.equal(racing.saves() - before, CONFLICT_RETRY_LIMIT, "one save per attempt, then give up");
 });
+
+test("a void tells each notified recipient once, even when its save loses a race (FS-017)", async () => {
+  const { app, racing, mailer, token, envelopeId } = await sentEnvelope();
+  // Both parallel signers were notified at send. Alice opens her link while the
+  // void is being saved, so the void's first save conflicts and is retried.
+  racing.raceNextSave(async () => {
+    await app.getSession(token("alice@x.test"));
+  });
+  const before = mailer.sent.length;
+
+  await app.voidEnvelope(envelopeId, "wrong counterparty");
+
+  const withdrawn = mailer.sent.slice(before);
+  assert.deepEqual(withdrawn.map((m) => m.to).sort(), ["alice@x.test", "bob@x.test"]);
+  for (const m of withdrawn) {
+    assert.match(m.subject, /^Withdrawn:/);
+    assert.equal(m.link, undefined, "a withdrawn notice carries no link");
+    assert.ok(!m.text.includes("wrong counterparty"), "the sender's reason is not sent to recipients");
+  }
+});
+
+test("voiding a draft sends no email (FS-017)", async () => {
+  const mailer = new CapturingMailer();
+  const { app } = buildInMemoryContainer({
+    mailer,
+    clock: new FixedClock("2026-11-09T00:00:00.000Z"),
+    ids: new SeededIdGenerator("draft-void"),
+    logger: new NullLogger(),
+    webhooks: null,
+    config: { baseUrl: "https://finesign.test" },
+  });
+  const env = await app.createDraft({ title: "Draft", routingType: "sequential", senderName: "Ops", senderEmail: "ops@co.test" });
+  await app.addRecipient(env.id, { name: "Alice", email: "alice@x.test", role: "signer", routingOrder: 1 });
+  await app.voidEnvelope(env.id, "never mind");
+  assert.equal((await app.getEnvelope(env.id)).status, "voided");
+  assert.equal(mailer.sent.length, 0);
+});
