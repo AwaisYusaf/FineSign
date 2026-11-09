@@ -1,0 +1,17 @@
+{
+  "name": "@finesign/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FineSign browser end-to-end tests (Playwright) — the real web UI against the real API.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.9.1",
+    "pdf-lib": "^1.17.1",
+    "typescript": "^5.9.3"
+  }
+}

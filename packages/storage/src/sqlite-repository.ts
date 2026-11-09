@@ -91,18 +91,26 @@ export class SqliteEnvelopeRepository implements EnvelopeRepository {
   }
 
   async save(envelope: Envelope): Promise<void> {
-    // Optimistic-concurrency compare-and-swap. better-sqlite3 is synchronous, so
-    // the read + conditional write is effectively atomic within this process.
-    const row = this.db.prepare("SELECT seq, version FROM envelopes WHERE id = ?").get(envelope.id) as
-      | { seq: number; version: number }
-      | undefined;
-    if (row && row.version !== envelope.version) {
-      throw new ConflictError(
-        "VERSION_CONFLICT",
-        `envelope ${envelope.id} was modified concurrently (expected version ${envelope.version}, found ${row.version})`
-      );
-    }
-    this.persist(envelope, row ? row.seq : this.nextSeq(), envelope.version + 1);
+    // Optimistic-concurrency compare-and-swap. The version check and the write
+    // run in ONE immediate transaction, which takes SQLite's write lock before
+    // the read. Within a process better-sqlite3 is synchronous, so the plain
+    // read-then-write looked atomic — but a second process or worker thread on
+    // the same file could slip its write in between, and one of the two was then
+    // silently overwritten with no VERSION_CONFLICT (hundreds of lost updates in
+    // a two-thread stress run).
+    const compareAndSwap = this.db.transaction(() => {
+      const row = this.db.prepare("SELECT seq, version FROM envelopes WHERE id = ?").get(envelope.id) as
+        | { seq: number; version: number }
+        | undefined;
+      if (row && row.version !== envelope.version) {
+        throw new ConflictError(
+          "VERSION_CONFLICT",
+          `envelope ${envelope.id} was modified concurrently (expected version ${envelope.version}, found ${row.version})`
+        );
+      }
+      this.persist(envelope, row ? row.seq : this.nextSeq(), envelope.version + 1);
+    });
+    compareAndSwap.immediate();
   }
 
   async findById(id: string): Promise<Envelope | null> {

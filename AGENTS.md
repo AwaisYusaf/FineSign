@@ -20,6 +20,7 @@ monorepo; the web UI is React + Vite in plain JavaScript.
 | `npm test -w @finesign/<pkg>` | One package's tests (`core` is `-w finesign-core`). |
 | `cd packages/<pkg> && node --test --import tsx test/<file>.test.ts` | One test file. |
 | `npm run lint` · `npm run boundaries` | Lint only · purity/direction check only. |
+| `npm run e2e` | Browser end-to-end suite (Playwright): production UI build + real API, desktop and phone. ~15 s. First time: `npx playwright install chromium`. See `packages/e2e/README.md`. |
 | `npm run dev:api` · `npm run dev:web` | API on :4000 (loads `.env`) · web UI on :5173 (proxies to :4000). |
 
 **Tests import other packages from their built `dist/`.** After editing `domain`,
@@ -38,6 +39,7 @@ or you are testing stale code.
 | `packages/pades` | PAdES B-B → B-LTA sealing + verification | Yes — see [its AGENTS.md](packages/pades/AGENTS.md) |
 | `packages/server` | Fastify API + composition root (`container.ts`) | Yes |
 | `packages/web` | Sender console + signer page + webhooks admin | Browser — see [its AGENTS.md](packages/web/AGENTS.md) |
+| `packages/e2e` | Playwright end-to-end suite (boots its own API + web on :4010 / :5180) | Test-only |
 
 Dependencies point one way: `core`/`shared` → `domain` → `storage`/`convert`/`pades`
 → `server` → (HTTP) → `web`. `domain` imports only `@finesign/shared` and
@@ -85,6 +87,12 @@ Dependencies point one way: `core`/`shared` → `domain` → `storage`/`convert`
   build/boot time — never at module import. An empty FineSign setting (`KEY=`) means
   "default". A new setting goes in `.env.example` with a comment, and if it gates
   sealing, in `assertSealableLevel` too.
+- **Concurrency:** repositories save with an optimistic version check. Any
+  operation that can race other participants on a sent envelope (signer
+  actions, remind/resend/void) runs inside `retryOnConflict` in `app.ts`. Wrap
+  new ones the same way. Anything written BEFORE the save must be harmless if
+  that attempt loses: blobs get fresh keys, and a fixed-key blob (the standalone
+  certificate) is written only after the save succeeds.
 - **Storage adapters share contract tests** (`storage/test/repositories.test.ts`,
   `storage/src/webhook-contract.ts`). A new entity field means: update the contract
   fixtures and all three repositories; SQL repos keep a denormalized `expires_at`
@@ -110,6 +118,7 @@ Dependencies point one way: `core`/`shared` → `domain` → `storage`/`convert`
 ## Definition of done
 
 - [ ] `npm run gate` green.
+- [ ] Touched the web UI or a signer/sender flow? `npm run e2e` green too (CI runs it).
 - [ ] New or changed behavior has tests; a bug fix has a regression test.
 - [ ] Docs match reality: `docs/BACKLOG.md` (check off / file follow-ups),
       `CHANGELOG.md` (Unreleased), README / `.env.example` if usage or config changed.

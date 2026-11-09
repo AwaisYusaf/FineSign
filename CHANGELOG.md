@@ -4,6 +4,53 @@ All notable changes to FineSign. Milestones map to FACTORY §7.
 
 ## [Unreleased]
 
+### Browser end-to-end suite — and the bugs it found
+
+`packages/e2e`: 18 Playwright tests drive the web UI's production build against
+the real API in Chromium, at desktop and phone sizes and with classic scrollbars:
+the sender wizard, sequential and parallel signing, access codes, required
+fields, completion with a verified PAdES seal, the CC's copy, decline, void, dead
+links, remind/resend link rotation, and the webhooks page. `npm run e2e` runs it
+(~15 s); CI runs it as its own job, and the gate typechecks the specs. The server
+it boots ignores the developer's `.env` and shell settings.
+
+**Fixed (each with a regression test)**
+- **Parallel signers could lose a signature.** A submission that raced any other
+  write to the envelope — the co-signer signing, or merely opening their link —
+  got a raw 409 ("modified concurrently, expected version 13, found 14") and was
+  not recorded. Signer actions and remind/resend/void now redo the operation on
+  fresh state when the optimistic version check refuses a stale save (bounded,
+  jittered). Opening a link you already viewed no longer writes at all.
+- **Fields near the left margin could not be reached on a phone.** PDF pages
+  rendered at a fixed 680px and were centred, so on a phone each page's left edge
+  sat at a negative x that cannot be scrolled to. Pages now fit their container.
+- **Drawn signatures landed off-target on narrow screens.** The canvas was shrunk
+  by CSS but pointer coordinates were not rescaled (a stroke to 90% of the width
+  reached 47%), and its height was fixed, squashing the stroke. Both fixed.
+
+**Fixed after an adversarial review of the above**
+- **The standalone certificate of completion could describe a completion that
+  never happened.** It lives under a fixed blob key and was written before the
+  completing save, so an attempt that then lost the race — to a void, an expiry,
+  or the same signer's duplicate submission — left behind (or overwrote) the
+  certificate. It is now written only after the save wins, and the download route
+  also requires a completed envelope.
+- **SQLite lost updates across processes.** `save` read the version and wrote as
+  two statements; two processes on one database file could interleave and
+  silently overwrite each other (718 of 999 saves lost in a two-thread run). The
+  check and the write now share one immediate transaction.
+- **The PDF viewer could re-render forever** with classic scrollbars: narrower
+  pages are shorter, so the scrollbar could vanish and return on every render.
+  Growth below a 24px margin is now ignored.
+- **A double-clicked Remind/Resend sent two emails** and killed the first link.
+  The buttons now allow one request at a time.
+
+**Configuration**
+- `FINESIGN_ENV_FILE`: load a specific env file, or `none` (the E2E suite uses it
+  so a developer's `.env` can't reconfigure a test run).
+- `FINESIGN_PUBLIC_RATE_LIMIT_PER_MIN` / `FINESIGN_RATE_LIMIT_PER_MIN`: the per-IP
+  budgets (30 / 300) were hard-coded, too tight for many signers behind one NAT.
+
 ### First-run setup and AI-agent tooling
 
 Found by following the README literally on a clean checkout.

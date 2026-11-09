@@ -18,6 +18,12 @@ packages/web/dist/
 .env.*
 !.env.example
 
+# End-to-end suite: its throwaway database and Playwright's run artifacts
+packages/e2e/.data/
+packages/e2e/test-results/
+packages/e2e/playwright-report/
+packages/e2e/blob-report/
+
 # Logs / coverage / OS
 *.log
 coverage/

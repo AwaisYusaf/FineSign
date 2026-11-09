@@ -30,9 +30,16 @@ warnings allowed and a production `vite build`.
 - **Dev signer links** come from `GET /api/envelopes/:id/dev-links`, which only works
   when the server runs with `FINESIGN_DEV_EXPOSE_TOKENS=true`.
 
+- **PDF pages fit their container** (max 680px). Never give them a fixed width
+  again: on a phone that pushed each page's left edge off-screen, where fields
+  could not be tapped. The signature canvas scales pointer coordinates to its
+  520x160 drawing surface for the same reason.
+
 ## Verifying a change
 
-There are no unit or end-to-end tests for the UI yet. Lint and build passing is
-not proof that it works: run `finesign-api` + `finesign-web` (`.claude/launch.json`,
-or `npm run dev:api` / `npm run dev:web`) and click through the flow you changed —
-create an envelope, sign as each recipient, open the completed document.
+Run `npm run e2e` from the repo root: the Playwright suite in `packages/e2e`
+drives this UI against a real API at desktop and phone sizes (see its README).
+It locates elements by role, label and text, plus these test ids, which must
+survive any redesign: `pdf-page` (with `data-page` and `data-rendered`) and
+`signature-canvas`. For anything the suite does not cover yet, also click through
+it yourself with `finesign-api` + `finesign-web` (`.claude/launch.json`).

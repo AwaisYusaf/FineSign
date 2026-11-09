@@ -62,6 +62,7 @@ npm run gate                 # boundaries + build + typecheck + lint + tests + w
 cp .env.example .env         # then set the four local-dev values listed at its top
 npm run dev:api              # API on :4000 (SQLite + local blobs; loads .env)
 npm run dev:web              # web UI on :5173 (proxies /api and /sign to :4000)
+npm run e2e                  # browser end-to-end tests (first: npx playwright install chromium)
 ```
 
 > `--legacy-peer-deps` is required (a transitive `unpdf`/`@napi-rs/canvas` peer

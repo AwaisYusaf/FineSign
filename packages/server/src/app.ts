@@ -147,6 +147,15 @@ export interface SessionView {
 /** How many overdue envelopes one expiry-sweep batch claims at a time. */
 const SWEEP_BATCH_SIZE = 200;
 
+/** Attempts a load → decide → save operation gets before a lost optimistic-
+ *  concurrency race is reported to the caller (see `retryOnConflict`). */
+export const CONFLICT_RETRY_LIMIT = 5;
+
+/** The repository's "someone else saved first" signal (contract-tested). */
+function isVersionConflict(e: unknown): boolean {
+  return e instanceof ConflictError && e.code === "VERSION_CONFLICT";
+}
+
 function certKey(envelopeId: string): string {
   return `env/${envelopeId}/certificate.pdf`;
 }
@@ -307,16 +316,20 @@ export class EnvelopeApp {
 
   /** Manually re-send an active recipient's signing link (fresh token). */
   async resend(envelopeId: string, recipientId: string): Promise<Envelope> {
-    const env = await this.load(envelopeId);
-    const result = this.svc.resend(env, recipientId, () => this.issueToken());
-    return this.persistThenDeliver(result.envelope, result.effects);
+    return this.retryOnConflict(async () => {
+      const env = await this.load(envelopeId);
+      const result = this.svc.resend(env, recipientId, () => this.issueToken());
+      return this.persistThenDeliver(result.envelope, result.effects);
+    });
   }
 
   /** Nudge an active recipient who hasn't yet signed (fresh token). */
   async remind(envelopeId: string, recipientId: string): Promise<Envelope> {
-    const env = await this.load(envelopeId);
-    const result = this.svc.remind(env, recipientId, () => this.issueToken());
-    return this.persistThenDeliver(result.envelope, result.effects);
+    return this.retryOnConflict(async () => {
+      const env = await this.load(envelopeId);
+      const result = this.svc.remind(env, recipientId, () => this.issueToken());
+      return this.persistThenDeliver(result.envelope, result.effects);
+    });
   }
 
   /**
@@ -356,10 +369,12 @@ export class EnvelopeApp {
   }
 
   async voidEnvelope(envelopeId: string, reason: string): Promise<Envelope> {
-    const env = await this.load(envelopeId);
-    const voided = this.svc.voidEnvelope(env, reason);
-    await this.deps.repo.save(voided);
-    return voided;
+    return this.retryOnConflict(async () => {
+      const env = await this.load(envelopeId);
+      const voided = this.svc.voidEnvelope(env, reason);
+      await this.deps.repo.save(voided);
+      return voided;
+    });
   }
 
   // ── Webhooks (event callbacks) ──────────────────────────────────────────────
@@ -450,6 +465,10 @@ export class EnvelopeApp {
   }
 
   async getSession(rawToken: string): Promise<SessionView> {
+    return this.retryOnConflict(() => this.getSessionOnce(rawToken));
+  }
+
+  private async getSessionOnce(rawToken: string): Promise<SessionView> {
     const { envelope, recipientId } = await this.resolveToken(rawToken);
     // A completed envelope keeps serving this session read-only: the recipient is
     // entitled to the finished package they were told about, and their token is
@@ -476,9 +495,11 @@ export class EnvelopeApp {
       };
     }
 
-    // Mark viewed (best-effort; no-op if already past notified).
+    // Mark viewed (no-op if already past notified). Only save a real change: a
+    // reload by someone who already viewed must not bump the version and so
+    // collide with a co-signer's submission.
     const viewed = this.svc.markViewed(envelope, recipientId);
-    await this.deps.repo.save(viewed);
+    if (viewed !== envelope) await this.deps.repo.save(viewed);
 
     const rec = viewed.recipients.find((r) => r.id === recipientId)!;
     const myFields = viewed.fields.filter((f) => f.recipientId === recipientId);
@@ -550,19 +571,23 @@ export class EnvelopeApp {
    *  failure counter (via `AccessCodeAttemptError`) before surfacing the error, so
    *  the per-recipient lockout actually accumulates. */
   async authenticate(rawToken: string, accessCode: string): Promise<{ authenticated: boolean }> {
-    const { envelope, recipientId } = await this.resolveToken(rawToken);
-    let next: Envelope;
-    try {
-      next = this.svc.authenticate(envelope, recipientId, hashToken(accessCode));
-    } catch (e) {
-      if (e instanceof AccessCodeAttemptError) {
-        await this.deps.repo.save(e.envelope); // persist the failure counter / lockout
+    // Retried as a whole, so a lost race re-counts a wrong code on fresh state
+    // rather than dropping the failure counter that drives the lockout.
+    return this.retryOnConflict(async () => {
+      const { envelope, recipientId } = await this.resolveToken(rawToken);
+      let next: Envelope;
+      try {
+        next = this.svc.authenticate(envelope, recipientId, hashToken(accessCode));
+      } catch (e) {
+        if (e instanceof AccessCodeAttemptError) {
+          await this.deps.repo.save(e.envelope); // persist the failure counter / lockout
+        }
+        throw e;
       }
-      throw e;
-    }
-    await this.deps.repo.save(next);
-    const rec = next.recipients.find((r) => r.id === recipientId)!;
-    return { authenticated: this.svc.isAuthenticated(rec) };
+      await this.deps.repo.save(next);
+      const rec = next.recipients.find((r) => r.id === recipientId)!;
+      return { authenticated: this.svc.isAuthenticated(rec) };
+    });
   }
 
   /**
@@ -603,17 +628,21 @@ export class EnvelopeApp {
     fieldValues: FieldInput[],
     context: SigningContext
   ): Promise<{ status: string }> {
-    const { envelope, recipientId } = await this.resolveToken(rawToken);
-    const result = this.svc.applySignature(envelope, recipientId, signature, fieldValues, context, () => this.issueToken());
-    const finalEnv = await this.persistThenDeliver(result.envelope, result.effects);
-    return { status: finalEnv.status };
+    return this.retryOnConflict(async () => {
+      const { envelope, recipientId } = await this.resolveToken(rawToken);
+      const result = this.svc.applySignature(envelope, recipientId, signature, fieldValues, context, () => this.issueToken());
+      const finalEnv = await this.persistThenDeliver(result.envelope, result.effects);
+      return { status: finalEnv.status };
+    });
   }
 
   async declineByToken(rawToken: string, reason: string): Promise<{ status: string }> {
-    const { envelope, recipientId } = await this.resolveToken(rawToken);
-    const result = this.svc.decline(envelope, recipientId, reason);
-    const finalEnv = await this.persistThenDeliver(result.envelope, result.effects);
-    return { status: finalEnv.status };
+    return this.retryOnConflict(async () => {
+      const { envelope, recipientId } = await this.resolveToken(rawToken);
+      const result = this.svc.decline(envelope, recipientId, reason);
+      const finalEnv = await this.persistThenDeliver(result.envelope, result.effects);
+      return { status: finalEnv.status };
+    });
   }
 
   // ── Downloads ───────────────────────────────────────────────────────────────
@@ -668,13 +697,43 @@ export class EnvelopeApp {
   async downloadCertificate(envelopeId: string): Promise<Uint8Array> {
     const env = await this.load(envelopeId);
     const key = certKey(env.id);
-    if (!(await this.deps.blobs.exists(key))) {
+    // The status check is not redundant with the blob check: a certificate must
+    // describe the envelope as it is, never a completion that did not happen.
+    if (env.status !== "completed" || !(await this.deps.blobs.exists(key))) {
       throw new NotFoundError("certificate is available only after completion");
     }
     return this.deps.blobs.get(key);
   }
 
   // ── Effect execution ──────────────────────────────────────────────────────
+
+  /**
+   * Run a whole load → decide → save operation again when its save loses an
+   * optimistic-concurrency race (`VERSION_CONFLICT`).
+   *
+   * Once an envelope is out, its participants act on it concurrently: a
+   * co-signer signs, or just opens their link (which records "viewed"), while
+   * someone else's submission is mid-flight. The repository is right to refuse
+   * the stale save; the answer is to redo the work on fresh state rather than
+   * hand a signer a raw 409. Redoing is safe here: every operation re-reads the
+   * envelope, the domain re-derives its decision from it (a decision that is no
+   * longer legal throws its own error), and every blob written before the save
+   * uses a fresh random key, so a lost attempt leaves an orphan rather than
+   * clobbering a blob the winner references. (The one fixed-key blob, the
+   * standalone certificate, is written after the save.) Notifications and
+   * webhooks only run after a save succeeds, so a retry never double-sends. Bounded, with a short jittered
+   * pause so the competing request can finish.
+   */
+  private async retryOnConflict<T>(op: () => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await op();
+      } catch (e) {
+        if (!isVersionConflict(e) || attempt >= CONFLICT_RETRY_LIMIT) throw e;
+        await new Promise((resolve) => setTimeout(resolve, attempt * 10 + Math.floor(Math.random() * 10)));
+      }
+    }
+  }
 
   /**
    * Execute a domain operation's effects with a crash-safe ordering (K4):
@@ -687,18 +746,24 @@ export class EnvelopeApp {
    */
   private async persistThenDeliver(env: Envelope, effects: Effect[]): Promise<Envelope> {
     let cur = env;
+    let certificate: Uint8Array | undefined;
     const external: Effect[] = [];
     for (const effect of effects) {
       // State-changing effects (mutate the aggregate) run before the save.
       if (effect.type === "stamp") {
         cur = await this.stamp(cur, effect.recipientId, effect.documentIds, effect.signature);
       } else if (effect.type === "finalize") {
-        cur = await this.finalize(cur);
+        ({ envelope: cur, certificate } = await this.finalize(cur));
       } else {
         external.push(effect);
       }
     }
     await this.deps.repo.save(cur);
+    // The standalone certificate lives under a FIXED key, so it is written only
+    // once this save has won. Written before it, an attempt that then lost the
+    // race (a void, an expiry, a duplicate submission) left behind a certificate
+    // describing a completion that never happened, or overwrote the winner's.
+    if (certificate) await this.storeCertificate(cur, certificate);
     // Fan new audit events out to webhook subscribers (durable outbox), then run
     // external effects (mail). Both are post-save and best-effort.
     await this.enqueueWebhooks(cur);
@@ -706,6 +771,23 @@ export class EnvelopeApp {
       if (effect.type === "notify") await this.notifyBestEffort(cur, effect);
     }
     return cur;
+  }
+
+  /**
+   * Store the standalone certificate of completion after the completing save.
+   * The envelope is already durably completed and every signed PDF carries its
+   * own copy of the certificate, so a failure here must not report the signature
+   * as failed; it is logged loudly instead (the download route then 404s).
+   */
+  private async storeCertificate(env: Envelope, certificate: Uint8Array): Promise<void> {
+    try {
+      await this.deps.blobs.put(certKey(env.id), certificate, "application/pdf");
+    } catch (e) {
+      this.deps.logger.error(
+        { envelopeId: env.id, err: e instanceof Error ? e.message : String(e) },
+        "could not store the standalone certificate of completion (the signed PDFs still embed it)"
+      );
+    }
   }
 
   /**
@@ -864,16 +946,19 @@ export class EnvelopeApp {
 
   /**
    * On completion: build the certificate of completion (over the hashes of the
-   * signed content), store it standalone, AND append it to each signed document
-   * so the sealed PDF carries its own certificate (M6.1). Returns the envelope
-   * with each document's `signedBlobKey` pointing at the certified copy.
+   * signed content) and append it to each signed document so the sealed PDF
+   * carries its own certificate (M6.1). Returns the envelope with each
+   * document's `signedBlobKey` pointing at the certified copy, plus the
+   * certificate itself, which the caller stores standalone only after the save
+   * wins (its blob key is fixed; the certified copies' keys are fresh).
    *
-   * Runs EXACTLY ONCE per envelope: the `finalize` effect is emitted only on the
-   * sent→completed transition (domain-guarded), and a completed envelope rejects
-   * further signatures — so this never double-appends onto an already-certified
-   * copy. Not defensively idempotent beyond that guard by design.
+   * The `finalize` effect is emitted only on the sent→completed transition
+   * (domain-guarded) and a completed envelope rejects further signatures, so
+   * only one attempt can ever SAVE a completion. Others may run this and then
+   * lose the save race; that is harmless because nothing here writes to a key
+   * a saved envelope already references.
    */
-  private async finalize(env: Envelope): Promise<Envelope> {
+  private async finalize(env: Envelope): Promise<{ envelope: Envelope; certificate: Uint8Array }> {
     const hashes: { name: string; sha256: string }[] = [];
     for (const d of env.documents) {
       const key = d.signedBlobKey ?? d.pdfBlobKey;
@@ -886,8 +971,8 @@ export class EnvelopeApp {
       throw new ConflictError("SEAL_UNAVAILABLE", "document sealing is required but no sealer is configured");
     }
 
+    // Built here, stored by the caller only after the completing save wins.
     const cert = await buildCertificate(env, hashes);
-    await this.deps.blobs.put(certKey(env.id), cert, "application/pdf");
 
     let cur = env;
     for (const d of env.documents) {
@@ -909,7 +994,7 @@ export class EnvelopeApp {
       await this.deps.blobs.put(certifiedKey, finalBytes, "application/pdf");
       cur = this.svc.setDocumentSigned(cur, d.id, certifiedKey);
     }
-    return cur;
+    return { envelope: cur, certificate: cert };
   }
 }
 

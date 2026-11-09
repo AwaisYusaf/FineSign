@@ -53,6 +53,7 @@ first (Claude Code loads it through `CLAUDE.md`).
 | `npm run build` | `tsc -b` across all packages. |
 | `npm test -w <pkg>` | Run one package's tests (e.g. `@finesign/domain`). |
 | `npm run lint` | Type-aware ESLint. |
+| `npm run e2e` | Browser end-to-end tests (first time: `npx playwright install chromium`). CI runs it on every PR. |
 | `npm run licenses` | Regenerate the third-party dependency-license report. |
 | `docker compose up --build` | The self-host stack (web on :8080), as CI builds it. |
 

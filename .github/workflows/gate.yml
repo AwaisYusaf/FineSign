@@ -39,3 +39,34 @@ jobs:
 
       - name: Gate
         run: npm run gate
+
+  # The real web UI against the real API in Chromium (desktop + phone viewports).
+  # Its own job: it needs a browser download the fast gate should not wait on.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            packages/e2e/playwright-report
+            packages/e2e/test-results
+          retention-days: 7

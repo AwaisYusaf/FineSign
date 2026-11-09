@@ -35,6 +35,10 @@ else
   echo "  ⤹ skipping tests (build red)"
 fi
 
+# Browser E2E specs must keep compiling even where browsers aren't installed;
+# running them is `npm run e2e` (CI runs it as its own job).
+step "e2e typecheck" npx tsc -p packages/e2e
+
 # Web app (JS/JSX Vite) — its own lint + production build verify it compiles.
 step "web lint" bash -c 'cd packages/web && npx eslint src --max-warnings 0'
 step "web build" bash -c 'cd packages/web && npx vite build'

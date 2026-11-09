@@ -6,11 +6,11 @@
 > here disagree with the code, **the code wins** — update this file.
 >
 > _Last updated: 2026-11-09. Status: DG1–DG5 complete, plus a finalization pass
-> and a first-run setup pass (CHANGELOG "First-run setup and AI-agent tooling");
-> `npm run gate` green; CI runs the gate on every PR. The short brief for agents is
-> now [`AGENTS.md`](../AGENTS.md); this file keeps the deeper history. Next up: the
-> "Web UI gaps" list in `docs/BACKLOG.md` (browser E2E tests first, then the UI
-> rebuild)._
+> a first-run setup pass, and a browser end-to-end suite (`packages/e2e`) that
+> found and fixed three real bugs (see CHANGELOG); `npm run gate` and `npm run e2e`
+> green, both in CI. The short brief for agents is [`AGENTS.md`](../AGENTS.md); this
+> file keeps the deeper history. Next up: the UI rebuild against the "Web UI gaps"
+> list in `docs/BACKLOG.md`, with the E2E suite as the safety net._
 
 ---
 

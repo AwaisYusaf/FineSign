@@ -27,10 +27,19 @@ export default function SignaturePad({ onChange }) {
     dirty.current = false;
   }, [mode]);
 
+  // Pointer position in CANVAS pixels. The canvas is 520x160 internally but CSS
+  // can shrink it (phones, narrow windows); without this scaling a stroke landed
+  // left of where the finger moved, proportionally to the shrink (BACKLOG U.4).
+  // Measured against the content box (client*), not the border box, so the 1px
+  // border does not skew the mapping either.
   function pos(e) {
-    const rect = canvasRef.current.getBoundingClientRect();
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
     const p = e.touches ? e.touches[0] : e;
-    return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+    return {
+      x: ((p.clientX - rect.left - canvas.clientLeft) * canvas.width) / canvas.clientWidth,
+      y: ((p.clientY - rect.top - canvas.clientTop) * canvas.height) / canvas.clientHeight,
+    };
   }
   function start(e) {
     drawing.current = true;
@@ -87,6 +96,8 @@ export default function SignaturePad({ onChange }) {
             width={520}
             height={160}
             className="sig-canvas"
+            data-testid="signature-canvas"
+            aria-label="Signature drawing area"
             onMouseDown={start}
             onMouseMove={move}
             onMouseUp={end}

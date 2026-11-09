@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   getEnvelope, voidEnvelope, getDevLinks, managementDocUrl, certificateUrl,
@@ -12,6 +12,8 @@ export default function EnvelopeDetail() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [verdicts, setVerdicts] = useState({}); // documentId -> verification result
+  const [nudging, setNudging] = useState(false); // a remind/resend request is in flight
+  const nudgingRef = useRef(false); // same, readable synchronously by a second click
 
   async function load() {
     try {
@@ -41,7 +43,12 @@ export default function EnvelopeDetail() {
     }
   }
 
+  // One request at a time: each re-mints the signer's link, so a double-click
+  // sent two emails and killed the link in the first one moments after it went.
   async function nudge(recipientId, kind) {
+    if (nudgingRef.current) return;
+    nudgingRef.current = true;
+    setNudging(true);
     setError(null);
     setNotice(null);
     try {
@@ -51,6 +58,9 @@ export default function EnvelopeDetail() {
       load();
     } catch (e) {
       setError(e.message);
+    } finally {
+      nudgingRef.current = false;
+      setNudging(false);
     }
   }
 
@@ -121,8 +131,8 @@ export default function EnvelopeDetail() {
                 <td>
                   {canNudge(r) && (
                     <span className="row" style={{ gap: 6 }}>
-                      <button className="btn ghost small" onClick={() => nudge(r.id, "remind")}>Remind</button>
-                      <button className="btn ghost small" onClick={() => nudge(r.id, "resend")}>Resend link</button>
+                      <button className="btn ghost small" disabled={nudging} onClick={() => nudge(r.id, "remind")}>Remind</button>
+                      <button className="btn ghost small" disabled={nudging} onClick={() => nudge(r.id, "resend")}>Resend link</button>
                     </span>
                   )}
                 </td>

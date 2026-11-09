@@ -17,7 +17,14 @@ import path from "node:path";
 import util from "node:util";
 import { NullLogger } from "@finesign/shared";
 import { InMemoryEnvelopeRepository, InMemoryBlobStore } from "@finesign/storage";
-import { applyEnvFile, dropEmptySettings, isFineSignSetting, loadEnvFiles } from "../src/env-file";
+import {
+  applyEnvFile,
+  dropEmptySettings,
+  isFineSignSetting,
+  loadEnvFiles,
+  loadLocalEnv,
+  positiveIntSetting,
+} from "../src/env-file";
 import { buildInMemoryContainer, buildProductionContainer } from "../src/container";
 
 const ENV_EXAMPLE = path.resolve(__dirname, "../../../.env.example");
@@ -103,6 +110,47 @@ test("loadEnvFiles: earlier files win, missing files are skipped, a path is read
   assert.equal(env.FINESIGN_SIGN_PATH, "/s");
   assert.deepEqual(loaded.map((f) => f.path), ["/work/.env", "/repo/.env"]);
   assert.deepEqual(reads, ["/work/.env", "/missing/.env", "/repo/.env"], "the duplicate path is not re-read");
+});
+
+test("loadLocalEnv: FINESIGN_ENV_FILE selects one file, or none, instead of the defaults", () => {
+  const files: Record<string, string> = {
+    "/repo/.env": "FINESIGN_BASE_URL=http://default\n",
+    "/ci/test.env": "FINESIGN_BASE_URL=http://chosen\n",
+  };
+  const reads: string[] = [];
+  const read = (p: string): string | undefined => {
+    reads.push(p);
+    return files[p];
+  };
+
+  const unset: NodeJS.ProcessEnv = {};
+  loadLocalEnv(unset, ["/repo/.env"], read);
+  assert.equal(unset.FINESIGN_BASE_URL, "http://default", "unset → the default lookup");
+
+  const chosen: NodeJS.ProcessEnv = { FINESIGN_ENV_FILE: "/ci/test.env" };
+  assert.deepEqual(loadLocalEnv(chosen, ["/repo/.env"], read).map((f) => f.path), ["/ci/test.env"]);
+  assert.equal(chosen.FINESIGN_BASE_URL, "http://chosen", "a path loads exactly that file");
+
+  reads.length = 0;
+  const none: NodeJS.ProcessEnv = { FINESIGN_ENV_FILE: "none" };
+  assert.deepEqual(loadLocalEnv(none, ["/repo/.env"], read), []);
+  assert.equal(none.FINESIGN_BASE_URL, undefined, "none → a local .env cannot leak in");
+  assert.deepEqual(reads, [], "none reads no file at all");
+
+  assert.throws(
+    () => loadLocalEnv({ FINESIGN_ENV_FILE: "/missing.env" }, ["/repo/.env"], read),
+    /FINESIGN_ENV_FILE="\/missing.env" does not exist/,
+    "an explicitly named file must exist"
+  );
+});
+
+test("positiveIntSetting: unset means default, a typo fails loudly", () => {
+  assert.equal(positiveIntSetting({}, "FINESIGN_RATE_LIMIT_PER_MIN"), undefined);
+  assert.equal(positiveIntSetting({ X: "" }, "X"), undefined);
+  assert.equal(positiveIntSetting({ X: "600" }, "X"), 600);
+  for (const bad of ["0", "-5", "1.5", "60/min", "abc"]) {
+    assert.throws(() => positiveIntSetting({ X: bad }, "X"), /X=".*" must be a positive whole number/, bad);
+  }
 });
 
 test("the shipped .env.example boots once empty values mean 'default' (Compose env_file path)", () => {

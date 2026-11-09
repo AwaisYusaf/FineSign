@@ -54,18 +54,19 @@ if (require.main === module) {
     const { createHttpServer } = await import("./http");
     const { ConsoleLogger } = await import("@finesign/shared");
     const { SmtpMailer, makeNodemailerTransport } = await import("./smtp-mailer");
-    const { loadEnvFiles, dropEmptySettings } = await import("./env-file");
+    const { loadLocalEnv, dropEmptySettings, positiveIntSetting } = await import("./env-file");
     const logger = new ConsoleLogger();
 
     try {
       // Environment first, before anything reads it. A local `.env` is picked up
       // from the working directory, then the repo root (`npm start -w` runs from
       // packages/server, but the README puts `.env` at the root). Real env vars
-      // always win. Both src/ and dist/ sit three levels below the repo root.
-      const envFiles = loadEnvFiles(
-        [path.resolve(process.cwd(), ".env"), path.resolve(__dirname, "../../../.env")],
-        process.env
-      );
+      // always win; FINESIGN_ENV_FILE picks another file, or `none`. Both src/ and
+      // dist/ sit three levels below the repo root.
+      const envFiles = loadLocalEnv(process.env, [
+        path.resolve(process.cwd(), ".env"),
+        path.resolve(__dirname, "../../../.env"),
+      ]);
       for (const f of envFiles) logger.info({ envFile: f.path, keys: f.keys.length }, "loaded settings from .env");
       // `KEY=` (from .env.example, via Compose `env_file` or the file above) means
       // "use the default", not "set to empty".
@@ -114,7 +115,14 @@ if (require.main === module) {
     // key shape, …) and throws on a bad value. Report that as one readable log
     // line, not an unhandled-rejection stack trace through Node internals.
     let built: ReturnType<typeof buildProductionContainer>;
+    let rateLimits: { publicPerMin?: number; globalPerMin?: number };
     try {
+      // Per-client-IP request budgets. Raise them when many people sign from
+      // behind one NAT'd address (an office, a VPN); defaults live in http.ts.
+      rateLimits = {
+        publicPerMin: positiveIntSetting(process.env, "FINESIGN_PUBLIC_RATE_LIMIT_PER_MIN"),
+        globalPerMin: positiveIntSetting(process.env, "FINESIGN_RATE_LIMIT_PER_MIN"),
+      };
       built = buildProductionContainer({
         sqliteFile: path.join(dataDir, "finesign.sqlite"),
         blobRoot: path.join(dataDir, "blobs"),
@@ -135,6 +143,8 @@ if (require.main === module) {
       senderApiKey,
       trustProxy,
       maxUploadBytes: deps.config.maxUploadBytes,
+      publicRateLimitPerMin: rateLimits.publicPerMin,
+      globalRateLimitPerMin: rateLimits.globalPerMin,
     });
     const port = Number(process.env.PORT ?? 4000);
     await server.listen({ port, host: "0.0.0.0" });

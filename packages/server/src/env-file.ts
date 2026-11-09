@@ -62,6 +62,20 @@ export function applyEnvFile(contents: string, env: NodeJS.ProcessEnv): string[]
   return applied;
 }
 
+/**
+ * Read an optional positive-integer setting: `undefined` when unset, the number
+ * when valid. Anything else throws, so a typo fails the boot loudly instead of
+ * silently falling back to a default the operator did not choose.
+ */
+export function positiveIntSetting(env: NodeJS.ProcessEnv, name: string): number | undefined {
+  const raw = env[name];
+  if (raw === undefined || raw === "") return undefined;
+  if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+    throw new Error(`${name}="${raw}" must be a positive whole number`);
+  }
+  return Number(raw);
+}
+
 /** One `.env` file that was found and applied. */
 export interface LoadedEnvFile {
   path: string;
@@ -90,6 +104,30 @@ export function loadEnvFiles(
     loaded.push({ path, keys: applyEnvFile(contents, env) });
   }
   return loaded;
+}
+
+/**
+ * Boot entry point: load the local `.env` files, honouring `FINESIGN_ENV_FILE`.
+ *
+ * `FINESIGN_ENV_FILE` is a shell/process variable (it cannot live inside the file
+ * it selects): a path loads exactly that file and fails if it is missing; `none`
+ * loads nothing. The end-to-end suite sets `none`, so a developer's own `.env`
+ * (SMTP credentials, a production seal level) can never reconfigure a test run.
+ * Unset, the `defaults` are tried in order and missing ones are skipped.
+ */
+export function loadLocalEnv(
+  env: NodeJS.ProcessEnv,
+  defaults: readonly string[],
+  read: (path: string) => string | undefined = readIfExists
+): LoadedEnvFile[] {
+  const override = env.FINESIGN_ENV_FILE;
+  if (override === "none") return [];
+  if (override !== undefined && override !== "") {
+    const loaded = loadEnvFiles([override], env, read);
+    if (loaded.length === 0) throw new Error(`FINESIGN_ENV_FILE="${override}" does not exist`);
+    return loaded;
+  }
+  return loadEnvFiles(defaults, env, read);
 }
 
 /** Read a file, or `undefined` if it does not exist. Any other error (a

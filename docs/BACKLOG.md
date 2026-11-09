@@ -140,22 +140,33 @@ Source list for the UI rebuild. Each needs a browser-level test once U.10 lands.
 - [ ] U.2 Move / resize a placed field (today: remove + re-drop only).
 - [ ] U.3 Edit or remove recipients and documents while in draft (the domain has
       `removeField` only — needs `removeRecipient` / `removeDocument`, audited).
-- [ ] U.4 Signature pad: the canvas is a fixed 520 px but can shrink with CSS, and
-      pointer coordinates are not rescaled, so strokes land off-target on narrow
-      screens; it also ignores `devicePixelRatio` (blurry on HiDPI). Found by
-      reading `SignaturePad.jsx` — confirm on a phone. Use pointer events.
+- [x] U.4 Signature pad strokes landed off-target when CSS shrank the canvas
+      (confirmed by E2E: 47% of the intended reach) and the fixed height squashed
+      them. Coordinates are now scaled and the shape kept.
 - [ ] U.5 The typed-signature preview uses a system cursive font, not the font that
       is stamped; serve `finesign-core`'s bundled fonts to the browser.
 - [ ] U.6 Signer guidance: jump to the next required field, show progress; replace
       `window.prompt` (decline, void) with a proper dialog that requires a reason.
+      A missed required field today only says "required fields are incomplete" —
+      highlight which one.
 - [ ] U.7 `ApiKeyGate` stores any key without checking it; verify against the API
       first and show a clear error.
 - [ ] U.8 The Webhooks form inputs are unstyled.
 - [ ] U.9 Code-split pdf.js — the main bundle is 565 kB (Vite warns).
-- [ ] U.10 Browser end-to-end tests (Playwright) for: create → send → sign
-      (sequential, access code, CC) → complete → verify seal; decline; void; expiry.
+- [x] U.10 Browser end-to-end suite (`packages/e2e`, Playwright, desktop + phone).
+      Expiry stays with the server integration tests (needs a controllable clock).
 - [ ] U.11 Move `packages/web` to TypeScript and a component system (shadcn/ui +
       Tailwind) — FACTORY NFR-5 asks for one language across the stack.
+- [x] U.12 PDF pages had a fixed 680px width; on a phone each page's left edge sat
+      at an unscrollable negative x, so fields near the left margin could not be
+      tapped. Pages now fit their container (found by E2E).
+- [ ] U.13 The signature canvas ignores `devicePixelRatio` (blurry on HiDPI), and
+      PDF pages render at 1x too.
+- [x] U.14 Fit-to-width pages re-rendered forever with classic scrollbars (pages
+      shrink → scrollbar vanishes → pages grow → scrollbar returns). Growth below
+      24px is ignored (`layout.spec.ts`).
+- [x] U.15 Remind/Resend could fire twice on a double-click (two emails, first link
+      dead). One request at a time now.
 - [ ] C.1 Certificate of completion: long user-agent strings run off the page.
 - [ ] C.2 A `cc` recipient still reads "pending" on a completed envelope (detail
       page + certificate) although the completed copy was sent.
@@ -186,6 +197,16 @@ Source list for the UI rebuild. Each needs a browser-level test once U.10 lands.
 - [ ] R.4 Full EC-PKCS#12 loading (PKI.js/OpenSSL) — forge P12 parse is RSA-only.
 - [ ] R.5 Certificate document-hash over the delivered sealed artifact (currently
       over the pre-seal intermediate) so it is self-verifiable.
+- [x] R.7 Concurrent writes: a signer's submission that raced another write to the
+      envelope (co-signer signing or opening a link) was rejected with a raw 409
+      and lost. Fixed with `retryOnConflict` (found by E2E; `concurrency.test.ts`).
+- [x] R.6 The standalone certificate (fixed key) was written before the completing
+      save, so a completion that lost its race (void, expiry, duplicate submission)
+      left a wrong certificate. Now written after the save; download requires
+      `completed`.
+- [x] R.8 SQLite `save` checked the version outside the write transaction: lost
+      updates across processes sharing one file. Now one immediate transaction
+      (`sqlite-concurrency.test.ts`).
 
 ## DocuSign parity roadmap → docs/DOCUSIGN-PARITY.md
 Tier-1 (legal credibility): ~~PAdES-B-T timestamps (P4)~~ ✅ DONE, signer IP/UA + ESIGN/UETA
