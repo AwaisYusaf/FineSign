@@ -9,6 +9,7 @@ import {
   ESIGN_CONSENT,
   AccessCodeAttemptError,
   type Envelope,
+  type EnvelopeListParams,
   type EnvelopeRepository,
   type BlobStore,
   type DocumentConverter,
@@ -19,6 +20,7 @@ import {
   type FieldInput,
   type DocumentFormat,
   type RecipientRole,
+  type RecipientStatus,
   type RecipientAuthMethod,
   type FieldKind,
   type IssuedToken,
@@ -127,7 +129,9 @@ export interface SessionView {
   /** Envelope status. `sent` is the signing state; `completed` turns the session
    *  into a read-only view of the finished package. */
   status: string;
-  recipient: { id: string; name: string; role: RecipientRole };
+  /** `status` lets the page show "already signed" to a signer who reopens
+   *  their link while others are still signing. */
+  recipient: { id: string; name: string; role: RecipientRole; status: RecipientStatus };
   /** True when this recipient must pass an access-code challenge first. */
   authRequired: boolean;
   /** True once authentication is satisfied (or not required). */
@@ -140,7 +144,18 @@ export interface SessionView {
     id: string;
     name: string;
     pageCount: number | null;
-    fields: { id: string; page: number; x: number; y: number; width: number; height: number; kind: FieldKind }[];
+    /** `required` lets the signer UI say what is still missing before the
+     *  server would reject the submission. */
+    fields: {
+      id: string;
+      page: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      kind: FieldKind;
+      required: boolean;
+    }[];
   }[];
 }
 
@@ -216,7 +231,7 @@ export class EnvelopeApp {
     return this.load(id);
   }
 
-  async listEnvelopes(params?: { limit?: number; offset?: number }): Promise<Envelope[]> {
+  async listEnvelopes(params?: EnvelopeListParams): Promise<Envelope[]> {
     return this.deps.repo.list(params);
   }
 
@@ -487,7 +502,7 @@ export class EnvelopeApp {
         envelopeId: envelope.id,
         title: envelope.title,
         status: envelope.status,
-        recipient: { id: current.id, name: current.name, role: current.role },
+        recipient: { id: current.id, name: current.name, role: current.role, status: current.status },
         authRequired: true,
         authenticated: false,
         consent,
@@ -503,61 +518,74 @@ export class EnvelopeApp {
 
     const rec = viewed.recipients.find((r) => r.id === recipientId)!;
     const myFields = viewed.fields.filter((f) => f.recipientId === recipientId);
-    const docIds = new Set(myFields.map((f) => f.documentId));
     return {
       envelopeId: viewed.id,
       title: viewed.title,
       status: viewed.status,
-      recipient: { id: rec.id, name: rec.name, role: rec.role },
+      recipient: { id: rec.id, name: rec.name, role: rec.role, status: rec.status },
       authRequired: rec.authMethod !== "none",
       authenticated: true,
       consent,
-      documents: viewed.documents
-        .filter((d) => docIds.has(d.id))
+      documents: this.documentsFor(viewed, recipientId)
         .map((d) => ({
           id: d.id,
           name: d.name,
           pageCount: d.pageCount,
           fields: myFields
             .filter((f) => f.documentId === d.id)
-            .map((f) => ({ id: f.id, page: f.page, x: f.x, y: f.y, width: f.width, height: f.height, kind: f.kind })),
+            .map((f) => ({
+              id: f.id,
+              page: f.page,
+              x: f.x,
+              y: f.y,
+              width: f.width,
+              height: f.height,
+              kind: f.kind,
+              required: f.required,
+            })),
         })),
     };
   }
 
   /**
-   * Which documents of a COMPLETED envelope this recipient may download.
+   * Which documents this recipient may see — while signing, and once completed.
    *
-   * Deliberately not "all of them": during signing a recipient sees only the
-   * documents carrying their own fields, and completion is not a reason to widen
-   * that.
+   * Deliberately not "all of them": a recipient sees only the documents carrying
+   * their own fields, and completion is not a reason to widen that.
    *
    * The exception is a recipient with NO fields, who was never scoped to a
-   * subset in the first place and would otherwise be handed an empty package.
-   * That is every `cc` — receiving the finished agreement is their entire role —
-   * and also an approver with nothing to fill in, which `validateForSend`
-   * permits (it requires fields of *signers* only).
+   * subset in the first place and would otherwise be handed nothing: an
+   * approver with nothing to fill in (which `validateForSend` permits — it
+   * requires fields of *signers* only) must still see what they are approving,
+   * and every `cc` receives the finished agreement — that is their entire role.
    */
-  private completedDocumentsFor(env: Envelope, recipientId: string): Envelope["documents"] {
+  private documentsFor(env: Envelope, recipientId: string): Envelope["documents"] {
     const mine = new Set(env.fields.filter((f) => f.recipientId === recipientId).map((f) => f.documentId));
     if (mine.size === 0) return env.documents;
     return env.documents.filter((d) => mine.has(d.id));
   }
 
-  /** The read-only session a recipient sees once the envelope is completed: the
-   *  finished, sealed documents, with no fields left to fill. */
+  /**
+   * The read-only session a recipient sees once the envelope is completed: the
+   * finished, sealed documents, with no fields left to fill.
+   *
+   * The access code still guards them. A signer passed it before signing, but a
+   * `cc` given a code never met the gate during signing, and the finished
+   * package is exactly what the sender asked the code to protect. Until it is
+   * entered the documents stay hidden (and `getSessionDocument` refuses them).
+   */
   private completedSession(env: Envelope, recipientId: string): SessionView {
     const rec = env.recipients.find((r) => r.id === recipientId)!;
+    const authenticated = this.svc.isAuthenticated(rec);
     return {
       envelopeId: env.id,
       title: env.title,
       status: env.status,
-      recipient: { id: rec.id, name: rec.name, role: rec.role },
+      recipient: { id: rec.id, name: rec.name, role: rec.role, status: rec.status },
       authRequired: rec.authMethod !== "none",
-      // The signing gate is spent; the token itself authorizes this read.
-      authenticated: true,
+      authenticated,
       consent: { version: ESIGN_CONSENT.version, disclosure: ESIGN_CONSENT.disclosure },
-      documents: this.completedDocumentsFor(env, recipientId).map((d) => ({
+      documents: (authenticated ? this.documentsFor(env, recipientId) : []).map((d) => ({
         id: d.id,
         name: d.name,
         pageCount: d.pageCount,
@@ -592,9 +620,9 @@ export class EnvelopeApp {
 
   /**
    * Serve a document's PDF bytes to the SIGNER (token-auth), so their browser can
-   * render it. Scoped to documents that actually carry one of this recipient's
-   * fields — a signer can't fetch a document they aren't party to. Returns the
-   * pre-signature normalized PDF (what they review + sign on top of).
+   * render it. Scoped by `documentsFor` — a signer can't fetch a document they
+   * aren't party to. Returns the pre-signature normalized PDF (what they review +
+   * sign on top of).
    */
   async getSessionDocument(
     rawToken: string,
@@ -609,12 +637,7 @@ export class EnvelopeApp {
     // copy — the artifact the recipient was told was available. Before that it is
     // the pre-signature PDF they review and sign on top of.
     const completed = envelope.status === "completed";
-    const allowed = completed
-      ? this.completedDocumentsFor(envelope, recipientId)
-      : envelope.documents.filter((d) =>
-          envelope.fields.some((f) => f.recipientId === recipientId && f.documentId === d.id)
-        );
-    const doc = allowed.find((d) => d.id === documentId);
+    const doc = this.documentsFor(envelope, recipientId).find((d) => d.id === documentId);
     const key = completed ? (doc?.signedBlobKey ?? doc?.pdfBlobKey) : doc?.pdfBlobKey;
     if (!doc || !key) throw new NotFoundError("document not available for this signer");
     const bytes = await this.deps.blobs.get(key);

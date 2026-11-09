@@ -11,7 +11,7 @@
  * `list()` comes from a `bigserial` column assigned by the database, not a
  * read-modify-write `MAX(seq)+1`, so concurrent creates can't collide on `seq`.
  */
-import type { Envelope, EnvelopeRepository } from "@finesign/domain";
+import type { Envelope, EnvelopeListParams, EnvelopeRepository } from "@finesign/domain";
 import { ConflictError } from "@finesign/shared";
 
 /** A checked-out connection (subset of `pg.PoolClient`). */
@@ -165,15 +165,15 @@ export class PostgresEnvelopeRepository implements EnvelopeRepository {
     return { envelope: env, recipientId: rows[0].recipient_id as string };
   }
 
-  async list(params?: { limit?: number; offset?: number }): Promise<Envelope[]> {
+  async list(params?: EnvelopeListParams): Promise<Envelope[]> {
     await this.ready;
-    const offset = params?.offset ?? 0;
-    const text =
-      params?.limit != null
-        ? "SELECT data FROM envelopes ORDER BY seq ASC LIMIT $1 OFFSET $2"
-        : "SELECT data FROM envelopes ORDER BY seq ASC OFFSET $1";
-    const args = params?.limit != null ? [params.limit, offset] : [offset];
-    const { rows } = await this.client.query(text, args);
+    const args: unknown[] = [];
+    const arg = (v: unknown) => `$${args.push(v)}`;
+    // An unknown cursor id makes the subquery NULL, and `seq < NULL` matches nothing.
+    const where = params?.before !== undefined ? `WHERE seq < (SELECT seq FROM envelopes WHERE id = ${arg(params.before)})` : "";
+    const limit = params?.limit != null ? `LIMIT ${arg(params.limit)}` : "";
+    const offset = `OFFSET ${arg(params?.offset ?? 0)}`;
+    const { rows } = await this.client.query(`SELECT data FROM envelopes ${where} ORDER BY seq DESC ${limit} ${offset}`, args);
     return rows.map((r) => JSON.parse(r.data as string) as Envelope);
   }
 

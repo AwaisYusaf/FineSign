@@ -20,12 +20,78 @@ import {
 } from "finesign-core";
 import { ValidationError } from "@finesign/shared";
 import type { Field, SignatureInput } from "@finesign/domain";
+import { encodableText, fieldText, standardHelvetica, typedName, unencodableChars } from "./pdf-text";
 
 /** 1×1 transparent PNG — used for the date-only pass (no signature drawn). */
 const TRANSPARENT_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 
 const STAMPABLE_SIGNATURE = new Set(["signature", "initials"]);
+
+/**
+ * What a typed signature puts in an initials field: the first letter of each
+ * word, upper-cased ("Jane Q. Public" → "JQP"). An initials field holding the
+ * full name was both wrong and, in a small box, unreadably shrunk. The signer
+ * page previews with the same rule (`packages/web`, SignaturePreview).
+ */
+export function initialsOf(name: string): string {
+  const initials = name
+    .trim()
+    .split(/\s+/u)
+    .map((word) => Array.from(word)[0] ?? "")
+    .join("")
+    .toUpperCase();
+  return initials || name;
+}
+
+/** "great_vibes" → "Great Vibes", for messages a signer reads. */
+function fontLabel(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** The offending characters for a message, capped (the input is the signer's). */
+const quoteChars = (chars: string[]): string =>
+  chars
+    .slice(0, 8)
+    .map((c) => `"${c}"`)
+    .join(", ") + (chars.length > 8 ? `, and ${chars.length - 8} more` : "");
+
+/**
+ * Reject signer input that would be stamped wrongly, BEFORE anything is drawn.
+ *
+ * Both failure modes were silent: a handwriting font draws a character it lacks
+ * as an empty box, and the text font (Helvetica, WinAnsi) can't encode non-Latin
+ * text at all, so a name in Cyrillic or Chinese came out as boxes or "???" on a
+ * legally binding document. Stamping runs before the envelope is saved, so a
+ * `ValidationError` here is a clean 400 with nothing persisted.
+ */
+async function assertStampable(engine: SignEngine, fields: Field[], signature: SignatureInput): Promise<void> {
+  if (signature.kind === "typed") {
+    const stamped = new Set<string>();
+    for (const f of fields) {
+      if (f.kind === "signature") stamped.add(signature.name);
+      else if (f.kind === "initials") stamped.add(initialsOf(signature.name));
+    }
+    const missing = [...new Set([...stamped].flatMap((text) => engine.missingGlyphs(signature.font, text)))];
+    if (missing.length > 0) {
+      throw new ValidationError(
+        `The ${fontLabel(signature.font)} signature style can't draw ${quoteChars(missing)}. ` +
+          "Choose another style, or draw your signature instead."
+      );
+    }
+  }
+  const texts = fields.filter((f) => f.kind === "text" && (f.value ?? "") !== "");
+  if (texts.length > 0) {
+    const font = await standardHelvetica();
+    const bad = [...new Set(texts.flatMap((f) => unencodableChars(fieldText(f.value ?? ""), font)))];
+    if (bad.length > 0) {
+      throw new ValidationError(
+        `A text field contains characters the document can't print: ${quoteChars(bad)}. ` +
+          "Text fields support Western European (Latin-1) characters only."
+      );
+    }
+  }
+}
 
 function anchorFromField(f: Field): SignatureAnchor {
   const isDate = f.kind === "date_signed";
@@ -53,29 +119,17 @@ function displayedPageHeightPt(info: PdfInfo, page: number): number {
   return p.rotation === 90 || p.rotation === 270 ? p.width : p.height;
 }
 
-/** Displayed page width in points for a 1-based page (accounts for rotation). */
-function displayedPageWidthPt(info: PdfInfo, page: number): number {
-  const p = info.pages[page - 1];
-  if (!p) return 612;
-  return p.rotation === 90 || p.rotation === 270 ? p.height : p.width;
-}
-
 function placementFromField(
   f: Field,
   name: string,
   font: SignaturePlacement["signatureFont"],
   info: PdfInfo
 ): SignaturePlacement {
+  // Size by the field's height; core then shrinks the name until its MEASURED
+  // width fits the field (K6). A per-character estimate let script capitals —
+  // initials above all — run well past the box onto the page.
   const heightPt = f.height * displayedPageHeightPt(info, f.page);
-  // Bound the scale by BOTH the field height and its width, so a long typed name
-  // in a narrow field can't overflow horizontally (K6). Estimate rendered width
-  // at scale 1 as ~0.5em per character of the 20pt base (script fonts are
-  // roughly this wide on average); pick the smaller of the two scale limits.
-  const heightScale = heightPt / 20;
-  const widthPt = f.width * displayedPageWidthPt(info, f.page);
-  const estWidthAtScale1 = Math.max(1, name.length * 20 * 0.5);
-  const widthScale = widthPt / estWidthAtScale1;
-  const scale = Math.max(0.5, Math.min(2.5, Math.min(heightScale, widthScale)));
+  const scale = Math.max(0.5, Math.min(2.5, heightPt / 20));
   return {
     signatureName: name,
     signatureFont: font,
@@ -83,6 +137,7 @@ function placementFromField(
     xPercent: f.x,
     yPercent: f.y,
     scale,
+    maxWidthPercent: f.width,
   };
 }
 
@@ -98,8 +153,9 @@ export interface StampSummary {
 /**
  * Draw text values + checkbox marks onto their fields (DG2). Coordinates are the
  * domain's top-left display fractions; here converted to pdf-lib's bottom-left
- * points (correct for unrotated pages — the common case). Text is font-safe:
- * unencodable code points fall back to ASCII so the stamp can never throw.
+ * points (correct for unrotated pages — the common case). `assertStampable`
+ * has already rejected text the font can't print; replacing what's left is a
+ * guard so the stamp can never throw.
  */
 async function stampTextAndCheckboxes(pdfBytes: Uint8Array, fields: Field[]): Promise<{ bytes: Uint8Array; count: number }> {
   const relevant = fields.filter((f) => (f.kind === "text" && (f.value ?? "") !== "") || (f.kind === "checkbox" && f.value === "true"));
@@ -107,14 +163,6 @@ async function stampTextAndCheckboxes(pdfBytes: Uint8Array, fields: Field[]): Pr
 
   const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   const font = await doc.embedFont(StandardFonts.Helvetica);
-  const fontSafe = (s: string): string => {
-    try {
-      font.widthOfTextAtSize(s, 12);
-      return s;
-    } catch {
-      return s.replace(/[^\x20-\x7e]/g, "?");
-    }
-  };
   const pages = doc.getPages();
   let count = 0;
   for (const f of relevant) {
@@ -137,7 +185,7 @@ async function stampTextAndCheckboxes(pdfBytes: Uint8Array, fields: Field[]): Pr
     }
 
     // Text: fit the font size to the box height, then shrink/truncate to width.
-    let text = fontSafe(f.value ?? "");
+    let text = encodableText(fieldText(f.value ?? ""), font);
     let size = Math.max(5, Math.min(14, boxH * 0.7));
     while (size > 5 && font.widthOfTextAtSize(text, size) > boxW - 4) size -= 0.5;
     while (text.length > 1 && font.widthOfTextAtSize(text, size) > boxW - 4) text = text.slice(0, -1);
@@ -176,8 +224,12 @@ async function stampUnchecked(
   engine: SignEngine,
   pdfBytes: Uint8Array,
   fields: Field[],
-  signature: SignatureInput
+  input: SignatureInput
 ): Promise<{ bytes: Uint8Array; summary: StampSummary }> {
+  // Checked and stamped as one normalized line (see `stampableText`): composed
+  // accents, no invisible characters, plain spaces only.
+  const signature: SignatureInput = input.kind === "typed" ? { ...input, name: typedName(input.name) } : input;
+  await assertStampable(engine, fields, signature);
   const dateFields = fields.filter((f) => f.kind === "date_signed");
   const sigFields = fields.filter((f) => STAMPABLE_SIGNATURE.has(f.kind));
 
@@ -197,7 +249,7 @@ async function stampUnchecked(
     const info = await getPdfInfo(bytes);
     if (sigFields.length > 0) {
       const placements = sigFields.map((f) =>
-        placementFromField(f, signature.name, signature.font, info)
+        placementFromField(f, f.kind === "initials" ? initialsOf(signature.name) : signature.name, signature.font, info)
       );
       bytes = await engine.signWithTypedNames(bytes, placements);
       signatureCount = sigFields.length;

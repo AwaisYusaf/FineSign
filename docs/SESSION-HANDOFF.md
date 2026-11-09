@@ -5,12 +5,14 @@
 > Read this first, then trust the code + the `docs/` referenced below. When facts
 > here disagree with the code, **the code wins** — update this file.
 >
-> _Last updated: 2026-11-09. Status: DG1–DG5 complete, plus a finalization pass
-> a first-run setup pass, and a browser end-to-end suite (`packages/e2e`) that
-> found and fixed three real bugs (see CHANGELOG); `npm run gate` and `npm run e2e`
-> green, both in CI. The short brief for agents is [`AGENTS.md`](../AGENTS.md); this
-> file keeps the deeper history. Next up: the UI rebuild against the "Web UI gaps"
-> list in `docs/BACKLOG.md`, with the E2E suite as the safety net._
+> _Last updated: 2026-11-09. Status: DG1–DG5 complete, plus a finalization pass,
+> a first-run setup pass, a browser end-to-end suite (`packages/e2e`), and a
+> rebuilt web UI (strict TypeScript, Tailwind v4, shadcn/ui) with the fixes from
+> its adversarial review (see CHANGELOG); `npm run gate` and `npm run e2e` green,
+> both in CI. The short brief for agents is [`AGENTS.md`](../AGENTS.md); this file
+> keeps the deeper history. Open next: sender accounts (X.8), moving/resizing
+> fields (U.2), and a Unicode font for text fields and the certificate (U.18) —
+> see `docs/BACKLOG.md`._
 
 ---
 
@@ -23,7 +25,7 @@ real cryptographic (PAdES/PKI) signatures, and keep every byte on your own infra
 with no per-signature fees. Apache-2.0 licensed.
 
 It is a **TypeScript npm-workspaces monorepo** (strict TS, no `any`) with a pure
-domain core, a Fastify REST API, and a React (JS) web UI. Built on **`finesign-core`**,
+domain core, a Fastify REST API, and a React + TypeScript web UI (Tailwind, shadcn/ui). Built on **`finesign-core`**,
 a standalone PDF signing engine.
 
 ---
@@ -87,7 +89,7 @@ packages/
   storage/   @finesign/storage — EnvelopeRepository (in-mem/SQLite/Postgres) + BlobStore (in-mem/local-FS) + WebhookStore + EncryptedBlobStore.
   pades/     @finesign/pades — PAdES B-B→B-LTA signing + verification (CMS/PKI, RFC 3161, DSS, CRL/OCSP).
   server/    @finesign/server — Fastify REST API + composition root (container.ts wires everything). This is where I/O lives.
-  web/       @finesign/web — React (JavaScript, not TS) + Vite + pdf.js. Sender console + signer page + webhooks admin.
+  web/       @finesign/web — React 19 + TypeScript + Vite + Tailwind v4 + shadcn/ui + TanStack Query + pdf.js. Sender console, guided signer page, webhooks admin.
 ```
 
 **Architecture boundaries (machine-enforced by `scripts/check-boundaries.sh`):**
@@ -236,7 +238,7 @@ per-recipient Remind/Resend buttons.
   entity fields must be added to the sample fixtures in the contract files.
 - **Tests are deterministic:** `FixedClock` + `SeededIdGenerator`; inject
   `fetchImpl`/`resolveHost`/`docxRunner`/mailer rather than hitting the network.
-- **Web is JavaScript (JSX), not TS.** ESLint-clean is part of the gate.
+- **Web is strict TypeScript too** (since the Phase 3 rebuild); typecheck, lint and build are gate steps, and `npm run e2e` drives it in a browser.
 
 ---
 
@@ -285,11 +287,20 @@ it. Full list in CHANGELOG "Finalization pass". The load-bearing ones:
   add a level or a new input, extend that check too.
 - **`EnvelopeRepository` gained `listExpirable(nowIso, limit)`.** Any new adapter
   must implement it, and the SQL ones keep a denormalized `expires_at` column
-  that has to track the aggregate — the contract test enforces this.
+  that has to track the aggregate — the contract test enforces this. `list()` is
+  newest first and takes a keyset cursor, `before` (an envelope id); page with
+  that, not `offset`, which shifts as envelopes are created.
 - **A completed envelope keeps serving its signer session** (read-only), and
   completion re-mints every recipient a token. `getSession` no longer assumes
-  status `sent`; `getSessionDocument` serves the signed copy after completion and
-  scopes visibility via `completedDocumentsFor`.
+  status `sent`; `getSessionDocument` serves the signed copy after completion.
+  Visibility, while signing and after, is one rule, `documentsFor`: documents
+  carrying the recipient's fields, or all of them for a recipient with none (a
+  cc, a fieldless approver). An access code keeps guarding the completed package
+  — `authenticate` accepts a `completed` envelope for exactly that.
+- **Signer input that would stamp wrongly is refused before the save**
+  (`assertStampable` in `stamping.ts`): characters a handwriting font has no glyph
+  for, and text-field characters outside WinAnsi. Stamping runs before
+  `repo.save`, so the 400 leaves nothing behind. The web mirrors both checks.
 - **`removeField` exists** (draft-only, audited, `field_removed` event) — the
   first domain mutation that removes rather than appends.
 - **finesign-core exports `SIGNATURE_FONTS` / `isSignatureFont` /
@@ -300,10 +311,10 @@ it. Full list in CHANGELOG "Finalization pass". The load-bearing ones:
 - **`.dockerignore` needs `**/*.tsbuildinfo`.** Without the `**/`, stale
   incremental state reached the image, `tsc -b` emitted nothing, and the built
   image had no entrypoint. Do not relax it.
-- **CSS**: `.pdf-overlay` is `pointer-events: none` so clicks reach the page
-  beneath (that is how fields are dropped). Any interactive control inside it
-  must opt back in — this had silently disabled the signer's text/checkbox
-  fields entirely.
+- **CSS**: the PDF overlay (`PdfView`) is `pointer-events-none` so clicks reach
+  the page beneath (that is how fields are dropped). Any interactive control
+  inside it must opt back in (`pointer-events-auto`) — forgetting this once
+  silently disabled the signer's text/checkbox fields entirely.
 
 ## 10. Gotchas / non-obvious things
 

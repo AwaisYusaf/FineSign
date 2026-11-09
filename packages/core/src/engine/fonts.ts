@@ -10,6 +10,7 @@
 
 import fs from "fs";
 import path from "path";
+import fontkit, { type Font } from "@pdf-lib/fontkit";
 import { SIGNATURE_FONTS, type SignatureFont } from "../types";
 
 /**
@@ -44,6 +45,7 @@ export class FontRegistry {
   private readonly fontsDir: string;
   private readonly overrides = new Map<string, Uint8Array>();
   private readonly cache = new Map<string, Uint8Array>();
+  private readonly parsed = new Map<string, Font>();
 
   constructor(options?: { fontsDir?: string }) {
     this.fontsDir = options?.fontsDir ?? DEFAULT_FONTS_DIR;
@@ -53,6 +55,33 @@ export class FontRegistry {
   register(fontKey: string, bytes: Uint8Array): void {
     this.overrides.set(fontKey, bytes);
     this.cache.delete(fontKey);
+    this.parsed.delete(fontKey);
+  }
+
+  /**
+   * The distinct characters of `text` this font has no glyph for, in order of
+   * first appearance. Empty means the name stamps exactly as typed.
+   *
+   * Why it exists: pdf-lib embeds a custom font without complaint and draws a
+   * missing character as the font's blank "notdef" box, so a name in a script
+   * the handwriting font lacks would be stamped as empty boxes on a signed
+   * document. Callers check first and reject (the bundled fonts cover Latin and
+   * Vietnamese; only some cover Cyrillic; none cover Greek, CJK, Arabic, …).
+   * Every character counts, whitespace included: the name is drawn as one
+   * string, so an ideographic space (U+3000, which no bundled font has) is a
+   * box too. Normalize exotic whitespace to U+0020 before calling.
+   */
+  missingGlyphs(fontKey: string, text: string): string[] {
+    let font = this.parsed.get(fontKey);
+    if (!font) {
+      font = fontkit.create(this.getBytes(fontKey));
+      this.parsed.set(fontKey, font);
+    }
+    const missing = new Set<string>();
+    for (const ch of text) {
+      if (!font.hasGlyphForCodePoint(ch.codePointAt(0)!)) missing.add(ch);
+    }
+    return [...missing];
   }
 
   /** Resolve a font key to its bytes: explicit override → bundled file. Throws

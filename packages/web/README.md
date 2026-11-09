@@ -1,64 +1,72 @@
 # @finesign/web
 
-The FineSign web UI — a **React (JavaScript)** app built with Vite. Two surfaces:
+The FineSign web UI: **React 19 + TypeScript + Vite**, styled with **Tailwind CSS
+v4** and **[shadcn/ui](https://ui.shadcn.com)** components, data via **TanStack
+Query**, routing via **react-router v7**, documents rendered with **pdf.js**.
 
-- **Sender console** (`/`, `/new`, `/envelopes/:id`) — protected by the sender
-  API key. Create an envelope, upload PDF/DOCX documents, add recipients, place
-  signature/date/initials fields by clicking on the rendered pages, and send.
-- **Signer page** (`/s/:token`) — public, token-authenticated. The signer reviews
-  their documents (rendered with pdf.js), draws or types a signature, and signs
-  all their fields in one action (or declines).
+Two surfaces:
+
+- **Sender console** (`/`, `/new`, `/envelopes/:id`, `/envelopes/:id/edit`,
+  `/webhooks`) — behind the sender API key. A dashboard with status filters and
+  search; a five-step envelope wizard (details → documents → recipients →
+  click-to-place fields → review & send) whose drafts can be left and resumed; an
+  envelope page with live status, reminders, seal verification and the audit
+  trail; webhooks admin.
+- **Signer page** (`/s/:token`) — public, token-authenticated, no account. A
+  progress checklist with "next field", one adopted signature (typed in the exact
+  fonts `finesign-core` stamps with, or drawn), explicit ESIGN/UETA consent,
+  decline with a reason, and the finished package for download once complete.
+
+Light and dark themes (follows the OS by default), and laid out for phones.
 
 ## Why the signer page is `/s/:token`
 
-The API owns `/sign/*` (JSON + PDF bytes). The human-facing signer *page* is a
-separate SPA route, `/s/:token`, so it never collides with those API routes
-behind the dev proxy. The server builds signing links with this path when
-`FINESIGN_SIGN_PATH=/s` is set (see below).
+The API owns `/sign/*` (JSON + PDF bytes). The human-facing page is the SPA route
+`/s/:token`, so it never collides with those API routes behind the proxy. The
+server builds email links with this path when `FINESIGN_SIGN_PATH=/s`.
 
 ## Run it locally
 
-1. **Start the API** (from `packages/server`) with dev-friendly settings:
+From the repo root, with `.env` set up as `.env.example` describes:
 
-   ```bash
-   FINESIGN_SENDER_API_KEY=dev-sender-key-123456 \
-   FINESIGN_DEV_EXPOSE_TOKENS=true \
-   FINESIGN_BASE_URL=http://localhost:5173 \
-   FINESIGN_SIGN_PATH=/s \
-   PORT=4000 \
-   npm start -w @finesign/server
-   ```
+```bash
+npm run dev:api    # API on :4000
+npm run dev:web    # this app on :5173 (proxies /api and /sign to :4000)
+```
 
-   - `FINESIGN_DEV_EXPOSE_TOKENS=true` lets the sender console show signer links
-     without reading email. **Never enable in production.**
-   - `FINESIGN_BASE_URL` + `FINESIGN_SIGN_PATH` make signing links point at the
-     web app's signer route.
-   - Or put the same values in the repo-root `.env` (see `.env.example`) and run
-     `npm run dev:api` from the root — the server loads it automatically.
-
-2. **Start the web app** (from `packages/web`):
-
-   ```bash
-   npm run dev
-   ```
-
-   Open http://localhost:5173, enter the sender API key, and create an envelope.
-   The Vite dev server proxies `/api` and `/sign` to the API on :4000.
+Open http://localhost:5173 and enter the sender API key. With
+`FINESIGN_DEV_EXPOSE_TOKENS=true` the envelope page shows each signer's link.
 
 ## Scripts
 
 ```bash
-npm run dev      # Vite dev server (port 5173, proxies to :4000)
-npm run build    # production build → dist/
-npm run lint     # eslint (react-hooks rules)
+npm run dev        # Vite dev server
+npm run build      # typecheck + production build → dist/
+npm run typecheck  # tsc (strict)
+npm run lint       # eslint (typescript-eslint + react-hooks), zero warnings
 ```
 
-## Notes / not-yet
+Browser tests live in [`packages/e2e`](../e2e) (`npm run e2e` from the root).
 
-- A placed field can be removed (click it) but not yet moved or resized, and a
-  draft cannot be reopened in the wizard once you leave it — see `docs/BACKLOG.md`
-  ("Web UI gaps").
-- Real-time status updates (websockets) are deferred (backlog M5.4); the detail
-  page reflects state on load.
-- The typed-signature preview uses a system cursive fallback; the *stamped*
-  signature uses finesign-core's bundled fonts server-side.
+## Layout
+
+```
+src/
+  main.tsx, App.tsx          providers, lazy-loaded routes
+  index.css                  Tailwind + design tokens (light/dark CSS variables)
+  components/ui/             shadcn/ui primitives (vendored; see components.json)
+  components/                app components: shell, PdfView, status badge, …
+  lib/                       api client + types, auth/theme contexts, formatting
+  pages/                     dashboard, envelope detail, webhooks, sign-in
+  pages/wizard/              the envelope wizard, one file per step
+  pages/sign/                the signer page, signature dialog, drawing pad
+```
+
+Every route is its own chunk: a signer never downloads the sender console, and
+pdf.js (the largest dependency) loads only on pages that show a document.
+
+## Adding a shadcn/ui component
+
+`components.json` is configured, so `npx shadcn@latest add <component>` works, or
+copy the source from ui.shadcn.com. Components import `cn` from `@/lib/utils` and
+`radix-ui` primitives.

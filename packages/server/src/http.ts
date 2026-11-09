@@ -207,7 +207,12 @@ export async function createHttpServer(app: EnvelopeApp, options: HttpOptions): 
   });
 
   server.get("/api/envelopes", async (req) => {
-    const q = req.query as { limit?: string; offset?: string };
+    const q = req.query as { limit?: string; offset?: string; before?: string };
+    // Newest first; page back with `before=<id of the last envelope shown>`,
+    // which stays stable while new envelopes arrive (offsets shift).
+    if (q.before !== undefined && (typeof q.before !== "string" || q.before.length === 0 || q.before.length > 200)) {
+      throw new ValidationError("before must be an envelope id");
+    }
     // Validate + clamp so bad input can't 500 or dump the whole table (D3).
     const clampInt = (v: string | undefined, def: number, min: number, max: number) => {
       const n = Number.parseInt(v ?? "", 10);
@@ -216,6 +221,7 @@ export async function createHttpServer(app: EnvelopeApp, options: HttpOptions): 
     return app.listEnvelopes({
       limit: clampInt(q.limit, 50, 1, 200),
       offset: clampInt(q.offset, 0, 0, Number.MAX_SAFE_INTEGER),
+      ...(q.before !== undefined ? { before: q.before } : {}),
     });
   });
 

@@ -85,6 +85,13 @@ export interface SignaturePlacement {
   yPercent: number;
   /** Size multiplier (typically 0.5–2.5); font size = baseFontSize × scale. */
   scale: number;
+  /**
+   * Optional: the widest the name may run, as a fraction (0–1) of displayed
+   * page width. The font size shrinks (never grows) until the measured text
+   * fits — a box width is the only bound a caller can know, since glyph widths
+   * vary wildly (script capitals are far wider than lowercase).
+   */
+  maxWidthPercent?: number;
 }
 
 /**

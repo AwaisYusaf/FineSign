@@ -6,6 +6,7 @@
  */
 import crypto from "crypto";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { encodableText } from "./pdf-text";
 import { ESIGN_CONSENT, type Envelope } from "@finesign/domain";
 
 export function sha256Hex(bytes: Uint8Array): string {
@@ -33,14 +34,9 @@ export async function buildCertificate(
     // Attacker-controlled strings (name, email, user-agent, …) reach this render.
     // The standard-font WinAnsi encoder THROWS on unencodable code points, which
     // would crash certificate generation inside `finalize` and permanently wedge
-    // envelope completion. Fall back to an ASCII-safe rendering so it can never
-    // throw — the certificate is a legal artifact and must always be produced.
-    try {
-      page.drawText(text, { x: margin, y, size, font: f, color: rgb(0.1, 0.1, 0.1) });
-    } catch {
-      const safe = text.replace(/[^\x20-\x7e]/g, "?");
-      page.drawText(safe, { x: margin, y, size, font: f, color: rgb(0.1, 0.1, 0.1) });
-    }
+    // envelope completion. Replace just the characters it can't encode, so it can
+    // never throw — the certificate is a legal artifact and must always be produced.
+    page.drawText(encodableText(text, f), { x: margin, y, size, font: f, color: rgb(0.1, 0.1, 0.1) });
     y -= opts.gap ?? size + 6;
   };
 

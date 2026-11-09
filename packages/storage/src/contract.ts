@@ -154,16 +154,29 @@ export async function runEnvelopeRepositoryContract(
     assert.equal((await repo.findById("cas"))!.title, "A again");
   }
 
-  // list returns created envelopes in insertion order, with paging.
+  // list returns created envelopes newest first, with paging — and a save
+  // (an update) must not move an envelope to the front.
   {
     const repo = makeRepo();
     await repo.create(sampleEnvelope("a"));
     await repo.create(sampleEnvelope("b"));
     await repo.create(sampleEnvelope("c"));
     const all = await repo.list();
-    assert.deepEqual(all.map((e) => e.id), ["a", "b", "c"]);
+    assert.deepEqual(all.map((e) => e.id), ["c", "b", "a"]);
     const page = await repo.list({ limit: 2, offset: 1 });
-    assert.deepEqual(page.map((e) => e.id), ["b", "c"]);
+    assert.deepEqual(page.map((e) => e.id), ["b", "a"]);
+    await repo.save({ ...(await repo.findById("a"))!, title: "edited" });
+    assert.deepEqual((await repo.list()).map((e) => e.id), ["c", "b", "a"]);
+
+    // Keyset paging stays put while envelopes arrive: page 1 is [c, b]; then d is
+    // created; "before b" is [a] — where offset 2 would now repeat b.
+    const first = await repo.list({ limit: 2 });
+    await repo.create(sampleEnvelope("d"));
+    const next = await repo.list({ limit: 2, before: first[first.length - 1]!.id });
+    assert.deepEqual(next.map((e) => e.id), ["a"]);
+    assert.deepEqual((await repo.list({ limit: 2, offset: 2 })).map((e) => e.id), ["b", "a"], "(what offset does)");
+    assert.deepEqual((await repo.list({ before: "d" })).map((e) => e.id), ["c", "b", "a"]);
+    assert.deepEqual(await repo.list({ before: "no-such-envelope" }), []);
   }
 
   // listExpirable returns only overdue SENT envelopes, oldest deadline first,

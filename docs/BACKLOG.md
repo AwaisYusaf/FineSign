@@ -135,41 +135,54 @@ by priority within each milestone. `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Web UI gaps (found driving the UI in a browser, 2026-11-09)
 Source list for the UI rebuild. Each needs a browser-level test once U.10 lands.
-- [ ] U.1 Resume a draft: the wizard always starts a new envelope and a draft's
-      detail page only offers "Void", so leaving the wizard strands the draft.
-- [ ] U.2 Move / resize a placed field (today: remove + re-drop only).
+- [x] U.1 Resume a draft — every wizard step has a URL; drafts show "Continue editing".
+- [ ] U.2 Move / resize a placed field (today: remove + re-drop only). Include
+      arrow-key nudging: keyboard placement exists (a "Place" button per page,
+      centred on the page) but a keyboard user can't reposition what it drops.
 - [ ] U.3 Edit or remove recipients and documents while in draft (the domain has
       `removeField` only — needs `removeRecipient` / `removeDocument`, audited).
 - [x] U.4 Signature pad strokes landed off-target when CSS shrank the canvas
       (confirmed by E2E: 47% of the intended reach) and the fixed height squashed
       them. Coordinates are now scaled and the shape kept.
-- [ ] U.5 The typed-signature preview uses a system cursive font, not the font that
-      is stamped; serve `finesign-core`'s bundled fonts to the browser.
-- [ ] U.6 Signer guidance: jump to the next required field, show progress; replace
-      `window.prompt` (decline, void) with a proper dialog that requires a reason.
-      A missed required field today only says "required fields are incomplete" —
-      highlight which one.
-- [ ] U.7 `ApiKeyGate` stores any key without checking it; verify against the API
-      first and show a clear error.
-- [ ] U.8 The Webhooks form inputs are unstyled.
-- [ ] U.9 Code-split pdf.js — the main bundle is 565 kB (Vite warns).
+- [x] U.5 Typed signatures preview in the stamping fonts (self-hosted @fontsource).
+- [x] U.6 Signer guidance: checklist, "next field", required fields marked, a sign
+      button that names what's missing; decline/void are dialogs requiring a reason.
+- [x] U.7 The sender key is verified with the server before it's stored.
+- [x] U.8 Webhooks page rebuilt (form, one-time secret dialog, confirm-to-delete).
+- [x] U.9 Routes and pdf.js are split; no chunk over 500 kB, pdf.js only where a PDF shows.
 - [x] U.10 Browser end-to-end suite (`packages/e2e`, Playwright, desktop + phone).
       Expiry stays with the server integration tests (needs a controllable clock).
-- [ ] U.11 Move `packages/web` to TypeScript and a component system (shadcn/ui +
-      Tailwind) — FACTORY NFR-5 asks for one language across the stack.
+- [x] U.11 `packages/web` is strict TypeScript on Tailwind v4 + shadcn/ui.
 - [x] U.12 PDF pages had a fixed 680px width; on a phone each page's left edge sat
       at an unscrollable negative x, so fields near the left margin could not be
       tapped. Pages now fit their container (found by E2E).
-- [ ] U.13 The signature canvas ignores `devicePixelRatio` (blurry on HiDPI), and
-      PDF pages render at 1x too.
+- [x] U.13 PDF pages and the signature pad render at devicePixelRatio.
 - [x] U.14 Fit-to-width pages re-rendered forever with classic scrollbars (pages
       shrink → scrollbar vanishes → pages grow → scrollbar returns). Growth below
       24px is ignored (`layout.spec.ts`).
 - [x] U.15 Remind/Resend could fire twice on a double-click (two emails, first link
       dead). One request at a time now.
 - [ ] C.1 Certificate of completion: long user-agent strings run off the page.
-- [ ] C.2 A `cc` recipient still reads "pending" on a completed envelope (detail
-      page + certificate) although the completed copy was sent.
+- [~] C.2 A `cc` recipient now reads "Gets a copy" / "Copy sent" in the UI; the
+      certificate PDF still prints their raw status ("pending").
+- [ ] U.16 Edit a draft's title/sender/signing order (no API for it yet), and drag
+      to move or resize a placed field (U.2) — both need API work.
+- [x] U.17 Review of the rebuild (each fixed with a regression test): adjacent
+      checkboxes stole each other's taps on a phone; non-Latin names/text were
+      stamped as boxes or "???" without a word (now a 400, steered in the UI);
+      initials stamped the full name and the preview cut names off; a CC with an
+      access code couldn't open the finished package; a fieldless approver saw no
+      documents and the wizard refused to send; no keyboard route to place a
+      field; the signature dialog forgot the adopted signature; the console
+      listed oldest first; light-mode badges under 4.5:1.
+- [ ] U.18 Text beyond Latin-1 on the page and the certificate: text fields and
+      the certificate use Helvetica (WinAnsi), so Central European letters ("ř",
+      "Ł", "ș"), Cyrillic, Greek, CJK, Arabic, … are refused in text fields and
+      print as "?" in certificate names. Embed a Unicode font (e.g. Noto Sans,
+      subset) for both, check coverage with fontkit as typed names do, then drop
+      the 400.
+- [ ] U.19 Approvers adopt a signature like signers do (the API requires one).
+      Decide whether approval should need only consent, and say so in the API.
 
 ## Critical-review remediation (multi-agent review — docs/review/critical-review.md)
 ### Fixed this pass (gate green)

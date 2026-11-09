@@ -106,6 +106,8 @@ test("full lifecycle: PDF + DOCX, two sequential signers, draft → completed", 
   assert.equal(session.recipient.name, "Alice");
   assert.equal(session.documents.length, 1);
   assert.equal(session.documents[0].fields.length, 2);
+  // Fields carry `required`, so the signer UI can flag what is missing up front.
+  assert.ok(session.documents[0].fields.every((f: { required: unknown }) => f.required === true));
 
   // The signer can fetch their document's PDF bytes to render it.
   res = await server.inject({ method: "GET", url: `/sign/${aliceToken}/documents/${doc1.id}` });
@@ -752,5 +754,27 @@ test("completion: an approver with no fields still receives the package", async 
   const doc = await server.inject({ method: "GET", url: `/sign/${tokenFromLink(link)}/documents/${docId}` });
   assert.equal(doc.statusCode, 200);
 
+  await server.close();
+});
+
+test("the envelope list is newest first and pages back with a stable `before` cursor", async () => {
+  const { server } = await setup();
+  const create = async (title: string) =>
+    j(await mgmt(server, "POST", "/api/envelopes", { title, senderName: "Ops", senderEmail: "ops@co.test", routingType: "sequential" })).id as string;
+  const a = await create("a");
+  const b = await create("b");
+  const c = await create("c");
+  const titles = (res: { payload: string }) => (j(res) as { title: string }[]).map((e) => e.title);
+
+  const first = await mgmt(server, "GET", "/api/envelopes?limit=2");
+  assert.deepEqual(titles(first), ["c", "b"]);
+  await create("d"); // arrives while the reader is on page 1
+  const next = await mgmt(server, "GET", `/api/envelopes?limit=2&before=${b}`);
+  assert.deepEqual(titles(next), ["a"], "offset=2 would now repeat b");
+  assert.deepEqual(titles(await mgmt(server, "GET", `/api/envelopes?before=${c}`)), ["b", "a"]);
+  assert.deepEqual(titles(await mgmt(server, "GET", "/api/envelopes?before=unknown")), []);
+  const tooLong = await mgmt(server, "GET", `/api/envelopes?before=${"x".repeat(201)}`);
+  assert.equal(tooLong.statusCode, 400);
+  void a;
   await server.close();
 });

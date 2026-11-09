@@ -356,14 +356,16 @@ export class EnvelopeService {
 
   /**
    * Authenticate a recipient with an access code (compared as SHA-256 hashes),
-   * gating the signing session. A no-op when no access code is required, and
-   * idempotent once authenticated. A wrong code increments a per-recipient failure
-   * counter; after `MAX_AUTH_ATTEMPTS` the recipient is LOCKED for
+   * gating the signing session (and, once completed, the finished package). A
+   * no-op when no access code is required, and idempotent once authenticated. A
+   * wrong code increments a per-recipient failure counter; after `MAX_AUTH_ATTEMPTS` the recipient is LOCKED for
    * `AUTH_LOCKOUT_MS` — so the low-entropy code cannot be brute-forced regardless
    * of the attacker's source IP. Records `recipient_authenticated` on success.
    */
   authenticate(env: Envelope, recipientId: string, providedAccessCodeHash: string): Envelope {
-    if (env.status !== "sent") {
+    // `completed` too: the access code keeps guarding the finished package, and a
+    // `cc` given a code meets the gate only then (they had no signing session).
+    if (env.status !== "sent" && env.status !== "completed") {
       throw new ConflictError("ENVELOPE_NOT_SENT", `envelope is "${env.status}", not accepting authentication`);
     }
     const rec = env.recipients.find((r) => r.id === recipientId);

@@ -29,6 +29,10 @@ agreement domain, a hardened Fastify API, and a React web UI.
   durable outbox, retry/backoff, and an SSRF-guarded deliverer.
 - **Encryption at rest** — transparent **AES-256-GCM** for every stored blob, with
   key rotation (KMS-ready key provider).
+- **A modern web UI** — a five-step envelope wizard with click-to-place fields and
+  resumable drafts; a guided signer page (progress checklist, "next field", typed
+  signatures in the exact fonts that get stamped, or drawn ones); light/dark mode;
+  works on phones. React + TypeScript + Tailwind + shadcn/ui.
 - **Self-hostable** — SQLite + local filesystem out of the box (Postgres adapter
   included); one-command Docker Compose.
 
@@ -46,7 +50,7 @@ review — see `docs/review/`.
 | [`@finesign/storage`](packages/storage) | `EnvelopeRepository` + `BlobStore` + webhook store adapters (in-memory, SQLite, Postgres, local FS) + encryption-at-rest decorator. |
 | [`@finesign/pades`](packages/pades) | PAdES B-B→B-LTA signing + verification (CMS/PKI, RFC 3161, DSS). |
 | [`@finesign/server`](packages/server) | Fastify REST API + composition root: sealing, webhooks, encryption wiring. |
-| [`@finesign/web`](packages/web) | React (JS) web UI — sender console + signer page + webhooks admin. |
+| [`@finesign/web`](packages/web) | Web UI (React 19, TypeScript, Tailwind, shadcn/ui) — sender console, guided signer page, webhooks admin; light/dark, mobile-ready. |
 
 Architecture and rules: [FACTORY.md](FACTORY.md) ·
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·

@@ -5,6 +5,14 @@
 
 import type { Envelope } from "./types";
 
+/** Paging for `EnvelopeRepository.list` (newest first). */
+export interface EnvelopeListParams {
+  limit?: number;
+  offset?: number;
+  /** Keyset cursor: only envelopes created before this envelope id. */
+  before?: string;
+}
+
 /** Persistence for the envelope aggregate (root + documents + recipients +
  *  fields + audit are saved/loaded together). */
 export interface EnvelopeRepository {
@@ -22,7 +30,17 @@ export interface EnvelopeRepository {
   findByRecipientTokenHash(
     tokenHash: string
   ): Promise<{ envelope: Envelope; recipientId: string } | null>;
-  list(params?: { limit?: number; offset?: number }): Promise<Envelope[]>;
+  /**
+   * Newest first (most recently created), so a console's first page shows the
+   * latest work.
+   *
+   * Page back with `before` (the id of the last envelope already shown): only
+   * envelopes created before it are returned. Unlike `offset`, that stays put
+   * while new envelopes arrive — newest-first offsets shift by one with every
+   * create, repeating an item across pages. An unknown `before` id yields an
+   * empty page. `offset` still applies, after `before`.
+   */
+  list(params?: EnvelopeListParams): Promise<Envelope[]>;
   /**
    * `sent` envelopes whose `expiresAt` is strictly before `nowIso`, oldest first,
    * capped at `limit`.

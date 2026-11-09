@@ -80,6 +80,16 @@ export class SignEngine {
   }
 
   /**
+   * The characters of `name` that `signatureFont` cannot draw (see
+   * `FontRegistry.missingGlyphs`). Check before `signWithTypedNames`: that call
+   * would otherwise stamp each missing character as a blank box. Throws
+   * `UnknownSignatureFontError` for an unknown font key.
+   */
+  missingGlyphs(signatureFont: string, name: string): string[] {
+    return this.fonts.missingGlyphs(signatureFont, name);
+  }
+
+  /**
    * TYPED-NAME signing: render one or more scripted-font names onto the PDF.
    * Returns the signed bytes. Throws `NotAPdfError` for non-PDF input and
    * `RangeError` if any placement targets a page outside the document.
@@ -117,6 +127,7 @@ export class SignEngine {
         yPercent: placement.yPercent,
         scale: placement.scale,
         font,
+        maxWidthPercent: placement.maxWidthPercent,
       });
     }
 

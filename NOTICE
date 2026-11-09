@@ -15,6 +15,9 @@ Bundled third-party assets:
 
 - Signature typefaces bundled with `finesign-core` are licensed under the
   SIL Open Font License 1.1 (see the font files' accompanying license).
+- The web UI's built assets include the Inter, Great Vibes, Dancing Script,
+  Pacifico and Pinyon Script typefaces (via the @fontsource packages), each
+  licensed under the SIL Open Font License 1.1 — see each package's LICENSE.
 
 Third-party npm dependencies are distributed under their own licenses; run
 `npm run licenses` (or see `docs/DEPENDENCY-LICENSES.md`) for the full list.

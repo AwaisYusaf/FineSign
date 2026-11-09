@@ -175,6 +175,30 @@ test("access-code brute-force: the recipient locks after repeated wrong codes", 
   assert.equal(svc.isAuthenticated(env.recipients.find((r) => r.id === rid)!), true);
 });
 
+test("access-code auth: a cc's code still guards the completed package", () => {
+  const { svc, clock } = make();
+  let env = svc.createEnvelope({ title: "Gated copy", routingType: "sequential", senderName: "Ops", senderEmail: "o@x.test" });
+  env = svc.addDocument(env, { name: "d.pdf", format: "pdf", originalBlobKey: "b", pageCount: 1 }).envelope;
+  const signer = svc.addRecipient(env, { name: "A", email: "a@x.test", role: "signer", routingOrder: 1 });
+  env = signer.envelope;
+  const cc = svc.addRecipient(env, { name: "C", email: "c@x.test", role: "cc", routingOrder: 2, authMethod: "access_code", accessCodeHash: hashToken("copy") });
+  env = cc.envelope;
+  const ccId = cc.recipient.id;
+  env = svc.addField(env, { documentId: env.documents[0].id, recipientId: signer.recipient.id, page: 1, x: 0.1, y: 0.8, width: 0.3, height: 0.05, kind: "signature" }).envelope;
+  const issueToken = (): IssuedToken => ({ token: "t", tokenHash: hashToken("t"), expiresAt: new Date(clock.now().getTime() + 1e7).toISOString() });
+  env = svc.send(env, issueToken).envelope;
+  env = svc.applySignature(env, signer.recipient.id, { kind: "typed", name: "A", font: "great_vibes" }, [], CONSENT, issueToken).envelope;
+  assert.equal(env.status, "completed");
+
+  // The cc never met the gate while signing was open: still locked out of the copy.
+  assert.equal(svc.isAuthenticated(env.recipients.find((r) => r.id === ccId)!), false);
+  assert.throws(() => svc.authenticate(env, ccId, hashToken("nope")), /access code is incorrect/i);
+  env = svc.authenticate(env, ccId, hashToken("copy"));
+  assert.equal(svc.isAuthenticated(env.recipients.find((r) => r.id === ccId)!), true);
+  assert.equal(env.audit.at(-1)?.type, "recipient_authenticated");
+  assert.equal(verifyAuditChain(env.audit), -1, "audit chain stays valid after completion");
+});
+
 test("parallel routing notifies all signers at send", () => {
   const { svc, issueToken } = make();
   let { env } = draftTwoSigners(svc);

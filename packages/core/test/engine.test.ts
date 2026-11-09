@@ -1,16 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PDFDocument } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import { createCanvas } from "@napi-rs/canvas";
 import {
   SignEngine,
   NotAPdfError,
+  defaultFontRegistry,
   detectAnchorsFromAcroForm,
   detectFields,
   isPdfBuffer,
   anchorFromDisplayBox,
   type SignatureAnchor,
 } from "../src/index";
+import { fitFontSize } from "../src/engine/stamp";
 
 /** Build a one-page PDF with two named AcroForm text fields the heuristics
  *  recognise: a signer signature line and a "date signed" box. */
@@ -183,3 +186,33 @@ function dummyAnchor(): SignatureAnchor {
     source: "manual",
   };
 }
+
+test("missingGlyphs reports the characters a signature font cannot draw", () => {
+  const engine = new SignEngine();
+  // Latin (with accents) and Vietnamese are covered by every bundled font.
+  assert.deepEqual(engine.missingGlyphs("great_vibes", "Jane Q. Public"), []);
+  assert.deepEqual(engine.missingGlyphs("dancing_script", "Zoë Nguyễn"), []);
+  // Coverage differs per font: Great Vibes has Cyrillic, Dancing Script does not.
+  assert.deepEqual(engine.missingGlyphs("great_vibes", "Иван"), []);
+  assert.deepEqual(engine.missingGlyphs("dancing_script", "Иван Ив"), ["И", "в", "а", "н"]);
+  // No bundled font covers CJK; each missing character is reported once.
+  assert.deepEqual(engine.missingGlyphs("pacifico", "Li 李李"), ["李"]);
+  // Whitespace counts too: the name is drawn as one string, so an ideographic
+  // space (no bundled font has it) or a newline would be stamped as a box.
+  assert.deepEqual(engine.missingGlyphs("great_vibes", "Taro\u3000Yamada"), ["\u3000"]);
+  assert.deepEqual(engine.missingGlyphs("great_vibes", "Jane\nDoe"), ["\n"]);
+  assert.throws(() => engine.missingGlyphs("comic_sans", "x"), /Unknown signature font/);
+});
+
+test("fitFontSize shrinks a typed name to the measured width it may use, never grows it", async () => {
+  const doc = await PDFDocument.create();
+  doc.registerFontkit(fontkit);
+  const font = await doc.embedFont(defaultFontRegistry.getBytes("great_vibes"));
+  const wide = font.widthOfTextAtSize("JQP", 40);
+  // Too wide: scaled so the measured width lands exactly on the limit.
+  const fitted = fitFontSize(font, "JQP", 40, wide / 2);
+  assert.ok(Math.abs(font.widthOfTextAtSize("JQP", fitted) - wide / 2) < 0.01);
+  // Already fits, or no limit given: unchanged.
+  assert.equal(fitFontSize(font, "JQP", 40, wide * 2), 40);
+  assert.equal(fitFontSize(font, "JQP", 40, undefined), 40);
+});

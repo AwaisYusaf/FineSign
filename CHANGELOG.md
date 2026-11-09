@@ -4,6 +4,88 @@ All notable changes to FineSign. Milestones map to FACTORY §7.
 
 ## [Unreleased]
 
+### A rebuilt web UI (TypeScript, Tailwind, shadcn/ui)
+
+`packages/web` is rewritten in strict TypeScript on React 19, Tailwind CSS v4 and
+shadcn/ui, with TanStack Query and react-router v7 — the last JavaScript package
+in the monorepo, now held to the same gate (typecheck, lint, build) as the rest.
+
+**Sender console**
+- Dashboard with status tabs and counts, search across titles and recipients,
+  signing progress per envelope, pagination; a layout that works on phones.
+- A five-step wizard — details, documents (drag and drop, several at once),
+  recipients (roles, signing steps, access codes), fields, review & send. Every
+  step after the first has its own URL, so **a draft can be left and resumed**
+  ("Continue editing"), and a refresh never loses the sender's place.
+- Field editor: pick who and what in a side panel, click the page to place (or,
+  from the keyboard, Tab to a page's "Place" button); each recipient's fields
+  wear their colour; select a field to remove it (or press Delete).
+- Envelope page: live status while it's out (5s poll), progress, remind/resend,
+  documents with seal verification, dev signer links with copy, and the audit
+  trail in plain language with draft-setup events folded away.
+- The API key is checked against the server before it's kept, and a key the
+  server stops accepting signs the console out with an explanation.
+- Void, decline and webhook deletion use proper dialogs (a reason is required to
+  void or decline), replacing `window.prompt` / `window.confirm`.
+
+**Signer page**
+- A checklist of what's left (with "next field"), required fields marked on the
+  page, and a sign button that says exactly what is still missing.
+- One adopted signature for every signature and initials field: typed — previewed
+  in the four fonts `finesign-core` actually stamps with (self-hosted) — or drawn
+  on a HiDPI pad. The date preview matches the stamp (MM/DD/YYYY, UTC).
+- Dead links explain why (replaced by a newer email, withdrawn, declined,
+  expired); a phone gets a sticky progress bar and generous tap targets.
+- The session API now says which fields are required, and the recipient's own
+  status (so a signer who reopens their link is told they're done).
+
+**Everywhere**
+- Light, dark and system themes (applied before first paint, CSP-safe); PDF pages
+  render crisp on HiDPI screens; routes and pdf.js are code-split, so the signer
+  page never loads the sender console and no page loads pdf.js until it shows a
+  document.
+
+**Changed**
+- `GET /api/envelopes` lists **newest first** (it was oldest first, so the
+  console's first page showed the oldest work), and pages back with
+  **`before=<id of the last envelope shown>`** — a cursor that stays put while
+  new envelopes arrive, where a newest-first `offset` repeats one across pages.
+  `offset` still works. The console pages by cursor.
+- Initials fields are stamped with the signer's initials ("Jane Q. Public" →
+  "JQP"), not the full name; typed names shrink to the field's **measured**
+  width (a per-character estimate let script capitals spill past the box).
+
+**Fixed after an adversarial review of the rebuild** (each with a regression test)
+- **On a phone, tapping a checkbox could tick its neighbour.** The invisible input
+  overhung its ~10px box by 12px on every side, so the later of two adjacent
+  checkboxes took the earlier one's taps. The overhang is now capped at half the
+  gap to the nearest field.
+- **Non-Latin names and text were stamped as empty boxes or "???", silently.** The
+  handwriting fonts lack some scripts (none has CJK, Arabic or Greek; two lack
+  Cyrillic) and the PDF's text font prints only Latin characters. The server now
+  refuses such input with a 400 before anything is saved, and the signer page
+  steers the signer first: styles that can't write the name are disabled (or it
+  offers "Draw your signature"), and a text field it can't print is flagged.
+  Text fields print Western European (Latin-1) characters: "Zoë" and "Café" now
+  print as typed there and on the certificate, where they used to become "?";
+  letters beyond Latin-1 ("ř", "Ł") are refused until text fields embed a
+  Unicode font (BACKLOG U.18). Signer text is normalized before it is checked
+  and stamped: composed accents, invisible format characters dropped, and any
+  whitespace (a newline, an IME's ideographic space) as a plain space — those
+  used to be stamped as empty boxes or a second line.
+- **A CC with an access code could not open the finished package**: the link said
+  "complete" and every download returned 403. The code now gates the completed
+  package properly — prompted for, then the documents.
+- **An approver with no fields saw no documents at all** while signing was open,
+  and the wizard refused to send such an envelope though the API accepts it.
+- **The initials preview showed "JQP" while the stamp printed the full name**;
+  the preview now also shrinks to fit instead of cutting names off ("J…").
+- Field placement had no keyboard route; the signature dialog forgot the adopted
+  signature when reopened and could adopt a drawing it no longer showed; a held
+  Delete key fired several removals; pdf.js documents were never released; a key
+  rejected on a PDF download didn't sign the sender out; "Completed" and error
+  badges fell short of WCAG AA contrast in light mode.
+
 ### Browser end-to-end suite — and the bugs it found
 
 `packages/e2e`: 18 Playwright tests drive the web UI's production build against

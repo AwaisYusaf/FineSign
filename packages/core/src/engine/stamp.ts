@@ -36,6 +36,16 @@ export const BASE_FONT_SIZE = 20;
 export const SIG_MAX_HEIGHT_MULT = 1.6;
 
 /**
+ * The font size at which `name` fits `maxWidthPt`: `fontSize` itself when it
+ * already fits, otherwise scaled down by the measured overflow. Never grows.
+ */
+export function fitFontSize(font: PDFFont, name: string, fontSize: number, maxWidthPt: number | undefined): number {
+  if (maxWidthPt === undefined || maxWidthPt <= 0) return fontSize;
+  const width = font.widthOfTextAtSize(name, fontSize);
+  return width > maxWidthPt ? fontSize * (maxWidthPt / width) : fontSize;
+}
+
+/**
  * Draw a scripted-font `name` with its glyph TOP-LEFT at the display-space point
  * (xPercent,yPercent). pdf-lib draws from the text baseline, so we shift down by
  * one ascent (along the display-down direction, which depends on `/Rotate`).
@@ -48,10 +58,13 @@ export function stampTypedName(
     yPercent: number;
     scale: number;
     font: PDFFont;
+    /** See `SignaturePlacement.maxWidthPercent`. */
+    maxWidthPercent?: number;
   }
 ): void {
   const { width: rawWidth, height: rawHeight } = page.getSize();
   const rotation = ((page.getRotation().angle % 360) + 360) % 360;
+  const displayedWidth = rotation === 90 || rotation === 270 ? rawHeight : rawWidth;
 
   const { absoluteX, absoluteY } = toPageCoords(
     params.xPercent,
@@ -61,7 +74,8 @@ export function stampTypedName(
     rotation
   );
 
-  const fontSize = BASE_FONT_SIZE * params.scale;
+  const maxWidthPt = params.maxWidthPercent === undefined ? undefined : params.maxWidthPercent * displayedWidth;
+  const fontSize = fitFontSize(params.font, params.name, BASE_FONT_SIZE * params.scale, maxWidthPt);
   // { descender: false } → ascent only, so the glyph TOP lands at the anchor.
   const ascent = params.font.heightAtSize(fontSize, { descender: false });
 

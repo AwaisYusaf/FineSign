@@ -35,10 +35,10 @@ webhook outbox, so the suite makes no outbound requests.
 
 | Spec | Scenarios |
 | --- | --- |
-| `sender.spec.ts` | API-key gate; the five-step wizard end to end (upload, recipients incl. access code + CC, click-to-place fields, remove a field, send with expiry), cross-checked against the API |
-| `signing.spec.ts` | Sequential signing with an access code → completion → PAdES seal verified (API + UI) → CC downloads the signed copy; parallel signers at once; sign button gating; required-field rejection; drawn-signature accuracy |
-| `lifecycle.spec.ts` | Decline (and cancelling a decline); void; unknown link; remind + resend rotate the link; a double-clicked Remind sends one; webhooks admin |
-| `mobile.spec.ts` | Signing on a phone with fields at the left margin; PDF pages fit the screen; signature accuracy in a narrow window |
+| `sender.spec.ts` | API-key gate (wrong key rejected, account menu); the five-step wizard end to end (upload, recipients incl. access code + CC, click-to-place fields, remove a field, send with expiry), cross-checked against the API; resuming a draft; placing (and deleting) a field with the keyboard alone; an approver with no fields sends, reviews and approves; the dashboard lists newest first and pages back by cursor (`before=`, stubbed API) |
+| `signing.spec.ts` | Sequential signing with an access code → completion → PAdES seal verified (API + UI) → CC downloads the signed copy; parallel signers at once; the sign button's step-by-step guidance; "next field"; drawn-signature accuracy; a CC's access code guards the finished package; reopening a link after signing; signature styles steered by script (Cyrillic, CJK → draw); unprintable text flagged; the dialog keeps the adopted signature |
+| `lifecycle.spec.ts` | Decline (and cancelling it); void; dead links explain why; remind + resend rotate the link; a double-clicked Remind sends one; webhooks admin |
+| `mobile.spec.ts` | Signing on a phone with fields at the left margin; PDF pages fit the screen; signature accuracy in a narrow window; a tap on one of two adjacent checkboxes ticks only that one |
 | `layout.spec.ts` | With classic (space-taking) scrollbars, the fit-to-width viewer settles instead of re-rendering forever |
 
 Expiry is not driven here (it needs a controllable clock); the server's

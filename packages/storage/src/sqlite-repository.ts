@@ -6,7 +6,7 @@
  * aggregate row and its token index never diverge.
  */
 import Database from "better-sqlite3";
-import type { Envelope, EnvelopeRepository } from "@finesign/domain";
+import type { Envelope, EnvelopeListParams, EnvelopeRepository } from "@finesign/domain";
 import { ConflictError } from "@finesign/shared";
 
 export class SqliteEnvelopeRepository implements EnvelopeRepository {
@@ -132,12 +132,19 @@ export class SqliteEnvelopeRepository implements EnvelopeRepository {
     return { envelope: env, recipientId: idx.recipient_id };
   }
 
-  async list(params?: { limit?: number; offset?: number }): Promise<Envelope[]> {
+  async list(params?: EnvelopeListParams): Promise<Envelope[]> {
     const limit = params?.limit ?? -1; // -1 → no limit in SQLite
     const offset = params?.offset ?? 0;
-    const rows = this.db
-      .prepare("SELECT data FROM envelopes ORDER BY seq ASC LIMIT ? OFFSET ?")
-      .all(limit, offset) as { data: string }[];
+    // An unknown cursor id makes the subquery NULL, and `seq < NULL` matches nothing.
+    const rows = (
+      params?.before !== undefined
+        ? this.db
+            .prepare(
+              "SELECT data FROM envelopes WHERE seq < (SELECT seq FROM envelopes WHERE id = ?) ORDER BY seq DESC LIMIT ? OFFSET ?"
+            )
+            .all(params.before, limit, offset)
+        : this.db.prepare("SELECT data FROM envelopes ORDER BY seq DESC LIMIT ? OFFSET ?").all(limit, offset)
+    ) as { data: string }[];
     return rows.map((r) => JSON.parse(r.data) as Envelope);
   }
 

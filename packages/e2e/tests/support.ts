@@ -155,6 +155,8 @@ export async function seedSentEnvelope(
     routing?: "sequential" | "parallel";
     bobAccessCode?: string;
     cc?: boolean;
+    /** Add the CC with this access code (implies `cc`). */
+    ccAccessCode?: string;
     title?: string;
     /** Give Alice only a signature + date (no text/checkbox inputs to fill). */
     signatureOnly?: boolean;
@@ -172,8 +174,14 @@ export async function seedSentEnvelope(
     routingOrder: routing === "parallel" ? 1 : 2,
     ...(opts.bobAccessCode ? { authMethod: "access_code", accessCode: opts.bobAccessCode } : {}),
   });
-  if (opts.cc) {
-    env = await api.addRecipient(env.id, { name: "Carol Copy", email: "carol@example.com", role: "cc", routingOrder: 3 });
+  if (opts.cc || opts.ccAccessCode) {
+    env = await api.addRecipient(env.id, {
+      name: "Carol Copy",
+      email: "carol@example.com",
+      role: "cc",
+      routingOrder: 3,
+      ...(opts.ccAccessCode ? { authMethod: "access_code", accessCode: opts.ccAccessCode } : {}),
+    });
   }
   const [alice, bob, carol] = env.recipients;
   const field = (recipientId: string, kind: string, page: number, x: number, y: number, width: number, height: number) =>
@@ -187,6 +195,20 @@ export async function seedSentEnvelope(
   await field(bob.id, "signature", 2, 0.18, 0.8, 0.24, 0.045);
   env = await api.send(env.id);
   return { envelope: env, documentId, alice, bob, carol };
+}
+
+/**
+ * Sign as a recipient straight through the signer API (typed name, consent, no
+ * field values) — for tests about what happens AFTER someone signs. Only for
+ * recipients whose fields are all signatures/dates (`signatureOnly`, or Bob).
+ */
+export async function signViaApi(request: APIRequestContext, link: string, name: string): Promise<string> {
+  const token = new URL(link).pathname.split("/").at(-1)!;
+  const res = await request.post(`${API_URL}/sign/${token}/apply`, {
+    data: { signature: { kind: "typed", name, font: "great_vibes" }, consent: true },
+  });
+  expect(res.ok(), `apply → ${res.status()}: ${await res.text()}`).toBe(true);
+  return ((await res.json()) as { status: string }).status;
 }
 
 // ── Page helpers ──────────────────────────────────────────────────────────────
@@ -207,10 +229,12 @@ export async function clickOnPage(page: Page, pageNumber: number, x: number, y: 
   await target.click({ position: { x: box.width * x, y: box.height * y } });
 }
 
-/** Draw a stroke across the signature canvas, from `fromX` to `toX` of its displayed width. */
+/** Draw a stroke across the signature canvas (the Draw tab must be open), from `fromX` to `toX` of its displayed width. */
 export async function drawSignature(page: Page, fromX = 0.1, toX = 0.9): Promise<void> {
   const canvas = page.getByTestId("signature-canvas");
-  await canvas.scrollIntoViewIfNeeded();
+  // A trial click waits for the canvas to be visible AND stable — the dialog
+  // animates in, and a box measured mid-animation would put the stroke elsewhere.
+  await canvas.click({ trial: true });
   const box = await canvas.boundingBox();
   if (!box) throw new Error("signature canvas is not visible");
   const y = box.y + box.height / 2;
@@ -219,6 +243,37 @@ export async function drawSignature(page: Page, fromX = 0.1, toX = 0.9): Promise
   await page.mouse.move(box.x + box.width * ((fromX + toX) / 2), y - box.height * 0.2, { steps: 8 });
   await page.mouse.move(box.x + box.width * toX, y, { steps: 8 });
   await page.mouse.up();
+}
+
+/** Open the signer's "Adopt your signature" dialog. */
+export async function openSignatureDialog(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: /^(Add|Change) signature$/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Adopt your signature" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Adopt a typed signature (the dialog's default tab). */
+export async function adoptTypedSignature(page: Page, name: string): Promise<void> {
+  const dialog = await openSignatureDialog(page);
+  await dialog.getByLabel("Full name").fill(name);
+  await dialog.getByRole("button", { name: "Adopt signature" }).click();
+  await expect(dialog).toBeHidden();
+}
+
+/** Open the dialog's Draw tab (the canvas is then ready for `drawSignature`). */
+export async function openDrawTab(page: Page): Promise<Locator> {
+  const dialog = await openSignatureDialog(page);
+  await dialog.getByRole("tab", { name: "Draw" }).click();
+  return dialog;
+}
+
+/** Adopt a drawn signature. */
+export async function adoptDrawnSignature(page: Page): Promise<void> {
+  const dialog = await openDrawTab(page);
+  await drawSignature(page);
+  await dialog.getByRole("button", { name: "Adopt signature" }).click();
+  await expect(dialog).toBeHidden();
 }
 
 /**
@@ -243,19 +298,24 @@ export async function inkRightEdge(page: Page): Promise<number> {
   });
 }
 
-/** Type a signature in the signature pad's "Type" mode. */
-export async function typeSignature(page: Page, name: string): Promise<void> {
-  await page.getByRole("button", { name: "Type", exact: true }).click();
-  await page.getByPlaceholder("Type your full name").fill(name);
-}
-
 /** The ESIGN/UETA consent checkbox on the signer page. */
 export const consentBox = (page: Page): Locator =>
   page.getByRole("checkbox", { name: /electronic records and signatures/i });
 
 export const signButton = (page: Page): Locator => page.getByRole("button", { name: "Sign all fields" });
 
-/** Answer the next `window.prompt`/`confirm` with `value` (decline and void ask for a reason). */
-export function answerNextDialog(page: Page, value?: string): void {
-  page.once("dialog", (dialog) => void dialog.accept(value));
+/** Pick an option in a shadcn/Radix select, found by its label. */
+export async function chooseOption(page: Page, label: string, option: string): Promise<void> {
+  await page.getByRole("combobox", { name: label }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+  await expect(page.getByRole("listbox")).toBeHidden();
+}
+
+/** Fill a reason dialog (void, decline) and confirm it. */
+export async function confirmWithReason(page: Page, dialogTitle: string | RegExp, reason: string, confirm: string): Promise<void> {
+  const dialog = page.getByRole("dialog", { name: dialogTitle });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("textbox").fill(reason);
+  await dialog.getByRole("button", { name: confirm, exact: true }).click();
+  await expect(dialog).toBeHidden();
 }

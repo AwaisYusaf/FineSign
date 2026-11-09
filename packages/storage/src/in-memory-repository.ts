@@ -3,7 +3,7 @@
  * Stores DEEP CLONES so a caller can never mutate the store by holding a
  * returned reference, and reads return clones for the same reason.
  */
-import type { Envelope, EnvelopeRepository } from "@finesign/domain";
+import type { Envelope, EnvelopeListParams, EnvelopeRepository } from "@finesign/domain";
 import { ConflictError } from "@finesign/shared";
 
 function clone(env: Envelope): Envelope {
@@ -50,10 +50,16 @@ export class InMemoryEnvelopeRepository implements EnvelopeRepository {
     return null;
   }
 
-  async list(params?: { limit?: number; offset?: number }): Promise<Envelope[]> {
+  async list(params?: EnvelopeListParams): Promise<Envelope[]> {
     const offset = params?.offset ?? 0;
     const limit = params?.limit ?? this.order.length;
-    return this.order
+    let ids = [...this.order];
+    if (params?.before !== undefined) {
+      const at = ids.indexOf(params.before);
+      ids = at < 0 ? [] : ids.slice(0, at); // created before the cursor
+    }
+    return ids
+      .reverse() // newest first (EnvelopeRepository.list)
       .slice(offset, offset + limit)
       .map((id) => clone(this.store.get(id)!));
   }

@@ -8,7 +8,7 @@ same change.
 FineSign is an open-source, self-hostable e-signature platform (a DocuSign
 alternative): upload PDF/DOCX → place fields → route to signers → sign → a
 PAdES-sealed PDF plus a hash-chained audit trail. TypeScript (strict) npm-workspaces
-monorepo; the web UI is React + Vite in plain JavaScript.
+monorepo end to end; the web UI is React 19 + Vite + Tailwind v4 + shadcn/ui.
 
 ## Commands
 

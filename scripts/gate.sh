@@ -39,7 +39,9 @@ fi
 # running them is `npm run e2e` (CI runs it as its own job).
 step "e2e typecheck" npx tsc -p packages/e2e
 
-# Web app (JS/JSX Vite) — its own lint + production build verify it compiles.
+# Web app (React + TypeScript + Vite) — strict typecheck, its own lint, and a
+# production build.
+step "web typecheck" bash -c 'cd packages/web && npx tsc -p tsconfig.json'
 step "web lint" bash -c 'cd packages/web && npx eslint src --max-warnings 0'
 step "web build" bash -c 'cd packages/web && npx vite build'
 
