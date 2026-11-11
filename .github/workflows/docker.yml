@@ -18,7 +18,7 @@ jobs:
   compose:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Write a .env for the build
         run: echo "FINESIGN_SENDER_API_KEY=ci-only-key-0123456789abcdef" > .env
